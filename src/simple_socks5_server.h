@@ -1,3 +1,1 @@
-int simple_socks5_server() {
-    return 0;
-}
+int simple_socks5_server();
