@@ -1,0 +1,1 @@
+int receive_only_server();
