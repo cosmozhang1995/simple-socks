@@ -18,7 +18,7 @@ while True:
         recvdata += readdata
     except BlockingIOError:
         pass
-    if time.time() - last_recv_time > 100:
+    if time.time() - last_recv_time > 1:
         break
 print(recvdata.decode('ascii'))
 sock.close()

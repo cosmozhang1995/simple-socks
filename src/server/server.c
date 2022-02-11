@@ -17,20 +17,18 @@
 typedef struct {
     int fd;
     void *ctx;
-    release_client_context_function_t ctx_release_fn;
     linked_node_t *lnode;
 } client_session_t;
 
 static int trigger_signal = 0;
 static void signal_handler(int signum);
 
-static client_session_t *create_client_session(
-    int fd,
-    create_client_context_function_t create_client_context_function,
+static client_session_t *create_client_session(int fd,
+    create_client_context_function_t create_client_context_function);
+static void release_client_session(client_session_t *session_ptr,
     release_client_context_function_t release_client_context_function);
-static void release_client_session(client_session_t *session_ptr);
 
-static int check_server_config(server_config_t config);
+static void close_client_session(int epollfd, client_session_t *session);
 
 int server(server_config_t config) {
     struct sockaddr_in server_addr;
@@ -42,7 +40,7 @@ int server(server_config_t config) {
     struct sockaddr_in client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
     struct epoll_event sock_epoll_event, client_epoll_event, epoll_events[EPOLL_SIZE];
-    client_session_t *client_session_ptr;
+    client_session_t *server_session_ptr = 0, *client_session_ptr;
     linked_list_t *session_list;
     linked_node_t *session_node;
 
@@ -52,8 +50,6 @@ int server(server_config_t config) {
         goto _l_exit; \
     }
 
-    CHECK_CALL(check_server_config(config), "illegal server config");
-
     epollfd = epoll_create(1024);
     session_list = linked_list_create();
 
@@ -61,7 +57,8 @@ int server(server_config_t config) {
     server_addr.sin_port = htons(1080);
     server_addr.sin_addr.s_addr = inet_addr("0.0.0.0");
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    sock_epoll_event.data.ptr = create_client_session(sockfd, 0, 0);
+    server_session_ptr = create_client_session(sockfd, 0);
+    sock_epoll_event.data.ptr = server_session_ptr;
     sock_epoll_event.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLRDHUP;
     epoll_ctl(epollfd, EPOLL_CTL_ADD, sockfd, &sock_epoll_event);
 
@@ -98,26 +95,34 @@ int server(server_config_t config) {
                     }
                     // printf("* established connection %d\n", connfd);
                     client_session_ptr = create_client_session(connfd,
-                        config.client_context_create, config.client_context_release);
-                    client_session_ptr->lnode = linked_list_append(session_list, client_session_ptr);
+                        config.create_client_context_function);
                     client_epoll_event.data.fd = connfd;
                     client_epoll_event.data.ptr = client_session_ptr;
                     client_epoll_event.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLRDHUP;
-                    epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd, &client_epoll_event);
+                    retcode = epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd, &client_epoll_event);
+                    if (retcode != 0) {
+                        printf("failed to add fd [%d] to epoll. ERROR [%d]\n", connfd, errno);
+                        close(connfd);
+                        release_client_session(client_session_ptr, config.release_client_context_function);
+                    }
+                    client_session_ptr->lnode = linked_list_append(session_list, client_session_ptr);
                 }
             } else {
                 if (epoll_events[i].events & EPOLLIN) {
-                    config.client_receive_handler(tfd);
+                    if (config.client_recv_handler) {
+                        config.client_recv_handler(tfd, client_session_ptr->ctx);
+                    }
                 }
                 if (epoll_events[i].events & EPOLLOUT) {
+                    if (config.client_send_handler) {
+                        config.client_send_handler(tfd, client_session_ptr->ctx);
+                    }
                 }
                 if (epoll_events[i].events & EPOLLERR) {
-                    printf("client event EPOLLERR\n");
+                    close_client_session(epollfd, client_session_ptr);
                 }
                 if (epoll_events[i].events & EPOLLRDHUP) {
-                    epoll_ctl(epollfd, EPOLL_CTL_DEL, tfd, 0);
-                    linked_list_remove(client_session_ptr->lnode);
-                    // printf("* closed connection %d\n", tfd);
+                    close_client_session(epollfd, client_session_ptr);
                 }
             }
         }
@@ -132,8 +137,8 @@ _l_exit:
         client_session_ptr = session_node->data;
         if (client_session_ptr) {
             printf("closing a client session\n");
+            epoll_ctl(epollfd, EPOLL_CTL_DEL, client_session_ptr->fd, 0);
             close(client_session_ptr->fd);
-            release_client_session(client_session_ptr);
         }
         linked_list_remove(session_node);
     }
@@ -142,29 +147,30 @@ _l_exit:
         printf("closing server\n");
         close(sockfd);
     }
+    if (server_session_ptr) {
+        release_client_session(server_session_ptr, 0);
+    }
     printf("bye.\n");
     return retcode;
 }
 
-static client_session_t *create_client_session(
-    int fd,
-    create_client_context_function_t create_client_context_function,
-    release_client_context_function_t release_client_context_function)
+static client_session_t *create_client_session(int fd,
+    create_client_context_function_t create_client_context_function)
 {
     client_session_t *session;
     session = malloc(sizeof(client_session_t));
     session->fd = fd;
     session->ctx = create_client_context_function ? create_client_context_function() : 0;
-    session->ctx_release_fn = release_client_context_function;
     session->lnode = 0;
     return session;
 }
 
-static void release_client_session(client_session_t *session)
+static void release_client_session(client_session_t *session,
+    release_client_context_function_t release_client_context_function)
 {
     if (session->ctx) {
-        if (session->ctx_release_fn) {
-            session->ctx_release_fn(session->ctx);
+        if (release_client_context_function) {
+            release_client_context_function(session->ctx);
         } else {
             free(session->ctx);
         }
@@ -172,15 +178,17 @@ static void release_client_session(client_session_t *session)
     free(session);
 }
 
+static void close_client_session(int epollfd, client_session_t *session)
+{
+    int retcode;
+    if ((retcode = epoll_ctl(epollfd, EPOLL_CTL_DEL, session->fd, 0)) != 0) {
+        printf("WARNING: failed to delete fd [%d] from epoll. ERROR [%d]\n", session->fd, errno);
+    }
+    linked_list_remove(session->lnode);
+    // printf("* closed connection %d\n", session->fd);
+}
+
 static void signal_handler(int signum)
 {
     trigger_signal = signum;
-}
-
-static int check_server_config(server_config_t config)
-{
-    if (!config.client_context_create) return -1;
-    if (!config.client_context_release) return -1;
-    if (!config.client_receive_handler) return -1;
-    return 0;
 }
