@@ -1,0 +1,10 @@
+#ifndef SOCKS5_AUTH_METHOD_H
+#define SOCKS5_AUTH_METHOD_H
+
+#define SOCKS5_AUTH_NONE     0x00
+#define SOCKS5_AUTH_GSSAPI   0x01
+#define SOCKS5_AUTH_PLAIN    0x02
+
+#define SOCKS5_AUTH_NO_ACCEPTABLE 0xFF
+
+#endif

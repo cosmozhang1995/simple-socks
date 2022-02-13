@@ -1,0 +1,1 @@
+#define SOCKS5_VERSION 0x05

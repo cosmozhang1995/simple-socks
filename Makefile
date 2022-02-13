@@ -5,7 +5,11 @@ CURDIR = $(shell pwd)
 CC = gcc
 CFLAGS = -I$(CURDIR)/src -g
 
-SOURCES = $(CURDIR)/src/*.c $(CURDIR)/src/server/*.c $(CURDIR)/src/util/*.c
+SOURCES = \
+	$(CURDIR)/src/server/*.c \
+	$(CURDIR)/src/util/*.c \
+	$(CURDIR)/src/socks5/*.c \
+	$(CURDIR)/src/*.c
 
 clean:
 	rm build/socks
