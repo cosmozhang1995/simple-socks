@@ -7,6 +7,7 @@
 
 #include "common/ss_types.h"
 #include "network/ss_connection_def.h"
+#include "network/ss_inet.h"
 
 typedef struct ss_listening_s ss_listening_t;
 
@@ -17,9 +18,8 @@ typedef ss_bool_t (*ss_listening_status_function_t)  (ss_listening_t *listening)
 
 struct ss_listening_s {
     int                                fd;
-    int                                domain;
     int                                type;
-    struct sockaddr                    address;
+    ss_addr_t                          address;
 
     /**
      * @brief Handler after a client connection is accepted.

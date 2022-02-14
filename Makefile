@@ -6,9 +6,10 @@ CC = gcc
 CFLAGS = -I$(CURDIR)/src -g
 
 SOURCES = \
-	$(CURDIR)/src/server/*.c \
-	$(CURDIR)/src/util/*.c \
-	$(CURDIR)/src/socks5/*.c \
+	$(CURDIR)/src/server/*.c     \
+	$(CURDIR)/src/util/*.c       \
+	$(CURDIR)/src/socks5/*.c     \
+	$(CURDIR)/src/network/*.c    \
 	$(CURDIR)/src/*.c
 
 clean:

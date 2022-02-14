@@ -15,6 +15,9 @@ typedef struct linked_list_s {
 typedef void (*ss_linked_list_release_data_function_t)(void*);
 
 ss_linked_list_t *ss_linked_list_create();
+void ss_linked_list_initialize(ss_linked_list_t *list);
+void ss_linked_list_uninitialize(ss_linked_list_t *list,
+    ss_linked_list_release_data_function_t release_data_function);
 void ss_linked_list_release(ss_linked_list_t *list,
     ss_linked_list_release_data_function_t release_data_function);
 ss_linked_node_t *ss_linked_list_append(ss_linked_list_t *list, void *data);

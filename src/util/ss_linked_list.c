@@ -18,14 +18,20 @@ static void linked_node_release(ss_linked_node_t *node)
 ss_linked_list_t *ss_linked_list_create()
 {
     ss_linked_list_t *list = malloc(sizeof(ss_linked_list_t));
+    ss_linked_list_initialize(list);
+    return list;
+}
+
+void ss_linked_list_initialize(ss_linked_list_t *list)
+{
     list->head = linked_node_create(0);
     list->tail = linked_node_create(0);
     list->head->next = list->tail;
     list->tail->prev = list->head;
-    return list;
 }
 
-void ss_linked_list_release(ss_linked_list_t *list, ss_linked_list_release_data_function_t release_data_function)
+void ss_linked_list_uninitialize(ss_linked_list_t *list,
+    ss_linked_list_release_data_function_t release_data_function)
 {
     ss_linked_node_t *cnode, *nnode;
     cnode = list->head;
@@ -37,6 +43,12 @@ void ss_linked_list_release(ss_linked_list_t *list, ss_linked_list_release_data_
         free(cnode);
         cnode = nnode;
     }
+}
+
+void ss_linked_list_release(ss_linked_list_t *list, ss_linked_list_release_data_function_t release_data_function)
+{
+    ss_linked_list_uninitialize(list, release_data_function);
+    free(list);
 }
 
 ss_linked_node_t *ss_linked_list_append(ss_linked_list_t *list, void *data)
