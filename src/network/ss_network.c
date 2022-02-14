@@ -2,8 +2,11 @@
 
 #include <stdlib.h>
 #include <errno.h>
+#include <memory.h>
 #include <sys/epoll.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/fcntl.h>
 
 #include "common/ss_defs.h"
 #include "util/ss_linked_list.h"
@@ -19,9 +22,9 @@ typedef struct {
     ss_uint8_t           type;
     ss_linked_node_t    *lnode;
     union {
-        ss_connection_t     *connection;
-        ss_listening_t      *listening;
-    }                    ptr;
+        ss_connection_t  connection;
+        ss_listening_t   listening;
+    }                    item;
 } ss_network_item_t;
 
 static ss_linked_list_t network_item_list;
@@ -37,6 +40,11 @@ int ss_network_prepare()
 
 void ss_network_handle_connection(uint32_t events, ss_network_item_t *nitem);
 void ss_network_handle_listening(uint32_t events, ss_network_item_t *nitem);
+
+void ss_connection_initialize(ss_connection_t *);
+void ss_connection_uninitialize(ss_connection_t *);
+void ss_listening_initialize(ss_listening_t *);
+void ss_listening_uninitialize(ss_listening_t *);
 
 int ss_network_main_loop()
 {
@@ -58,10 +66,10 @@ int ss_network_main_loop()
             if (!nitem) continue;
             switch (nitem->type) {
             case NIT_CONNECTION:
-                ss_network_handle_connection(epoll_events[i].events, nitem->ptr.connection);
+                ss_network_handle_connection(epoll_events[i].events, &nitem->item.connection);
                 break;
             case NIT_LISTENING:
-                ss_network_handle_connection(epoll_events[i].events, nitem->ptr.connection);
+                ss_network_handle_connection(epoll_events[i].events, &nitem->item.connection);
                 break;
             default:
                 break;
@@ -129,12 +137,10 @@ void ss_network_item_delete(ss_network_item_t *nitem)
     if (!nitem) return;
     switch (nitem->type) {
     case NIT_CONNECTION:
-        if (nitem->ptr.connection && nitem->ptr.connection->release)
-            nitem->ptr.connection->release(nitem->ptr.connection);
+        ss_connection_uninitialize(&nitem->item.connection);
         break;
     case NIT_LISTENING:
-        if (nitem->ptr.listening && nitem->ptr.listening->release)
-            nitem->ptr.listening->release(nitem->ptr.listening);
+        ss_listening_uninitialize(&nitem->item.listening);
         break;
     }
 }
@@ -147,40 +153,55 @@ ss_network_item_t *ss_network_item_create(ss_uint8_t type)
 {
     ss_network_item_t *nitem;
     nitem = malloc(sizeof(ss_network_item_t));
+    memset((void *)nitem, 0, sizeof(ss_network_item_t));
     nitem->type = type;
-    nitem->ptr.connection = SS_NULL;
-    nitem->ptr.listening = SS_NULL;
+    switch (type) {
+    case NIT_CONNECTION:
+        ss_connection_initialize(&nitem->item.connection);
+        break;
+    case NIT_LISTENING:
+        ss_listening_initialize(&nitem->item.listening);
+        break;
+    }
     return nitem;
 }
 
 void ss_network_item_delete(ss_network_item_t *nitem)
 {
+    switch (nitem->type) {
+    case NIT_CONNECTION:
+        ss_connection_uninitialize(&nitem->item.connection);
+        break;
+    case NIT_LISTENING:
+        ss_listening_uninitialize(&nitem->item.listening);
+        break;
+    }
     free(nitem);
 }
 
-#define SS_NETWORK_ADD_ITEM_FUNCTION(type, item)                                                    \
-ss_bool_t ss_network_add_##item##(ss_##item##_t * item)                                             \
-{                                                                                                   \
-    struct epoll_event   epevt;                                                                     \
-    ss_network_item_t   *nitem;                                                                     \
-    int                  rc;                                                                        \
-                                                                                                    \
-    if (epfd < 0) return SS_FALSE;                                                                  \
-    nitem = ss_network_item_create(type);                                                           \
-    epevt.data.ptr = nitem;                                                                         \
-    epevt.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLRDHUP;                                      \
-    rc = epoll_ctl(epfd, EPOLL_CTL_ADD, item->fd, &epevt);                                          \
-    if (rc != 0) {                                                                                  \
-        printf("failed to add fd [%d] to epoll. ERROR [%d]\n", item->fd, errno);                    \
-        ss_network_item_delete(nitem);                                                              \
-        return SS_FALSE;                                                                            \
-    }                                                                                               \
-    nitem->lnode = ss_linked_list_append(&network_item_list, nitem);                                \
-    nitem->ptr.item = item;                                                                         \
-}
+// #define SS_NETWORK_ADD_ITEM_FUNCTION(type, item)                                                    \
+// ss_bool_t ss_network_add_##item##(ss_##item##_t * item)                                             \
+// {                                                                                                   \
+//     struct epoll_event   epevt;                                                                     \
+//     ss_network_item_t   *nitem;                                                                     \
+//     int                  rc;                                                                        \
+//                                                                                                     \
+//     if (epfd < 0) return SS_FALSE;                                                                  \
+//     nitem = ss_network_item_create(type);                                                           \
+//     epevt.data.ptr = nitem;                                                                         \
+//     epevt.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLRDHUP;                                      \
+//     rc = epoll_ctl(epfd, EPOLL_CTL_ADD, item->fd, &epevt);                                          \
+//     if (rc != 0) {                                                                                  \
+//         printf("failed to add fd [%d] to epoll. ERROR [%d]\n", item->fd, errno);                    \
+//         ss_network_item_delete(nitem);                                                              \
+//         return SS_FALSE;                                                                            \
+//     }                                                                                               \
+//     nitem->lnode = ss_linked_list_append(&network_item_list, nitem);                                \
+//     nitem->ptr.item = item;                                                                         \
+// }
 
-SS_NETWORK_ADD_ITEM_FUNCTION(NIT_CONNECTION, connection)
-SS_NETWORK_ADD_ITEM_FUNCTION(NIT_LISTENING, listening)
+// SS_NETWORK_ADD_ITEM_FUNCTION(NIT_CONNECTION, connection)
+// SS_NETWORK_ADD_ITEM_FUNCTION(NIT_LISTENING, listening)
 
 static ss_inline
 void ss_network_item_close(ss_network_item_t *nitem, int fd);
@@ -189,7 +210,7 @@ void ss_network_handle_connection(uint32_t events, ss_network_item_t *nitem)
 {
     ss_connection_t *connection;
 
-    connection = nitem->ptr.connection;
+    connection = &nitem->item.connection;
     if (events & EPOLLIN) {
         if (connection->recv_handler) {
             connection->recv_handler(connection);
@@ -210,11 +231,48 @@ void ss_network_handle_connection(uint32_t events, ss_network_item_t *nitem)
 _l_end:
     return;
 _l_close:
-    close_client_session(connection->fd, nitem);
+    ss_network_item_close(connection->fd, nitem);
 }
 
 void ss_network_handle_listening(uint32_t events, ss_network_item_t *nitem)
 {
+    ss_listening_t      *listening;
+    ss_listening_t      *connection;
+    ss_network_item_t   *nitem;
+    struct epoll_event   epevt;
+    struct sockaddr      client_addr;
+    size_t               client_addr_len;
+    int                  fd;
+    int                  rc;
+
+    listening = &nitem->item.listening;
+    client_addr_len = sizeof(client_addr);
+    fd = accept(listening->fd, (struct sockaddr*)&client_addr, &client_addr_len);
+    if (fd < 0) {
+        printf("failed to establish connection. ERROR [%d]\n", errno);
+        return;
+    }
+    fcntl(fd, F_SETFL, O_NONBLOCK);
+
+    nitem = ss_network_item_create(NIT_CONNECTION);
+    connection = &nitem->item.connection;
+    connection->fd = fd;
+    connection->domain = listening->domain;
+    connection->type = listening->domain;
+    connection->address = listening->address;
+
+    epevt.data.ptr = nitem;
+    epevt.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLRDHUP;
+    rc = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &epevt);
+    if (rc != 0) {
+        printf("failed to add fd [%d] to epoll. ERROR [%d]\n", fd, errno);
+        close(fd);
+        ss_network_item_delete(connection);
+    }
+    
+    nitem->lnode = ss_linked_list_append(&network_item_list, nitem);
+
+    listening->accpet_handler(connection);
 }
 
 static ss_inline
