@@ -1,4 +1,4 @@
-#include "server/simple_socks5_server.h"
+#include "server/socks5_server.h"
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -51,7 +51,7 @@ static ss_cli_arguments_t get_argumetns(int argc, char *argv[])
     return result;
 }
 
-int simple_socks5_start(int argc, char *argv[])
+int socks5_start(int argc, char *argv[])
 {
     ss_config_t             *ss_config = 0;
     ss_cli_arguments_t       args;

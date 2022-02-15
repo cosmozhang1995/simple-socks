@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "network/ss_network.h"
 #include "server/simple_server.h"
-#include "server/simple_socks5_server.h"
+#include "server/socks5_server.h"
 
 int main(int argc, char *argv[]) {
     int rc;
@@ -13,7 +13,7 @@ int main(int argc, char *argv[]) {
         printf("failed to start server.\n");
         goto _l_end;
     }
-    if ((rc = simple_socks5_start(argc, argv)) != 0) {
+    if ((rc = socks5_start(argc, argv)) != 0) {
         printf("failed to start server.\n");
         goto _l_end;
     }
