@@ -12,10 +12,18 @@ SOURCES = \
 	$(CURDIR)/src/network/*.c    \
 	$(CURDIR)/src/*.c
 
+HEADERS = \
+	$(CURDIR)/src/server/*.h     \
+	$(CURDIR)/src/util/*.h       \
+	$(CURDIR)/src/socks5/*.h     \
+	$(CURDIR)/src/network/*.h    \
+
+BINARY = $(CURDIR)/build/socks
+
 clean:
 	rm build/socks
 
-build: socks
+build: $(BINARY)
 
-socks: $(SOURCES)
-	$(CC) $(CFLAGS) -o $(CURDIR)/build/socks $(SOURCES)
+$(BINARY): $(SOURCES) $(HEADERS)
+	$(CC) $(CFLAGS) -o $(BINARY) $(SOURCES)
