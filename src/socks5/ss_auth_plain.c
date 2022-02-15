@@ -6,6 +6,7 @@
 #include "socks5/ss_process_def.h"
 #include "socks5/ss_auth_plain_context.h"
 #include "util/ss_strmap.h"
+#include "util/ss_io_helper.h"
 
 #define SS_AUTH_PLAIN_VERSION        0x01
 
@@ -27,18 +28,18 @@ ss_int8_t ss_auth_plain_process(int fd, ss_context_t *context)
     ss_auth_plain_response_t resp;
    
     ctx = &context->auth.context.plain;
-    if (!ss_recv_via_buffer((void*)&version, fd, context, offset, sizeof(version)))
+    if (!ss_recv_via_buffer((void*)&version, fd, &context->read_buffer, offset, sizeof(version)))
         goto _l_again;
     if (version != SS_AUTH_PLAIN_VERSION)
         goto _l_error;
-    if (!ss_recv_via_buffer((void*)&ulen, fd, context, offset, sizeof(ulen)))
+    if (!ss_recv_via_buffer((void*)&ulen, fd, &context->read_buffer, offset, sizeof(ulen)))
         goto _l_again;
-    if (!ss_recv_via_buffer((void*)username, fd, context, offset, ulen))
+    if (!ss_recv_via_buffer((void*)username, fd, &context->read_buffer, offset, ulen))
         goto _l_again;
     username[(size_t)ulen] = '\0';
-    if (!ss_recv_via_buffer((void*)&plen, fd, context, offset, sizeof(plen)))
+    if (!ss_recv_via_buffer((void*)&plen, fd, &context->read_buffer, offset, sizeof(plen)))
         goto _l_again;
-    if (!ss_recv_via_buffer((void*)password, fd, context, offset, plen))
+    if (!ss_recv_via_buffer((void*)password, fd, &context->read_buffer, offset, plen))
         goto _l_again;
     password[(size_t)plen] = '\0';
 

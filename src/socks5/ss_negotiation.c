@@ -1,6 +1,7 @@
 #include "socks5/ss_negotiation.h"
 
 #include "common/ss_types.h"
+#include "util/ss_io_helper.h"
 #include "socks5/ss_context.h"
 #include "socks5/ss_version.h"
 #include "socks5/ss_auth_method.h"
@@ -26,7 +27,7 @@ ss_int8_t ss_negotiate_process(int fd, ss_context_t *context)
         goto _l_error;
     if (!ss_recv_via_buffer_auto_inc((void*)&n_methods, fd, context, &offset, sizeof(n_methods))) \
         goto _l_again;
-    if (!ss_recv_via_buffer(0, fd, context, offset, (size_t)n_methods))
+    if (!ss_recv_via_buffer(0, fd, &context->read_buffer, offset, (size_t)n_methods))
         goto _l_again;
 
     context->auth_method = SOCKS5_AUTH_NO_ACCEPTABLE;
