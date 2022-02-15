@@ -12,19 +12,21 @@ class CModule:
         self.header_file = module_path + '.h'
         self.source_file = module_path + '.c'
 
-        header_file_relpath = os.path.relpath(
+        module_rel_path = os.path.relpath(
             os.path.realpath(module_path),
             os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'src'))
         )
-        if header_file_relpath.startswith('..'):
-            header_file_relpath = os.path.relpath(
+        if module_rel_path.startswith('..'):
+            module_rel_path = os.path.relpath(
                 os.path.realpath(module_path),
                 os.path.realpath(os.path.join(os.path.dirname(__file__), '..', 'test'))
             )
-        if header_file_relpath.startswith('..'):
+        if module_rel_path.startswith('..'):
             raise Exception(f"module [{module_path}] should be either in the 'src' or the 'test' directory")
 
-        self.module_def = '_' + '_'.join(re.split(r'[\/\\]+', header_file_relpath)).upper() + '_H_'
+        self.module_rel_path = module_rel_path
+
+        self.module_def = '_' + '_'.join(re.split(r'[\/\\]+', module_rel_path)).upper() + '_H_'
         if not self.module_def.startswith('_SS_'):
             self.module_def = '_SS' + self.module_def
 
@@ -47,7 +49,9 @@ class CModule:
     
     def compile_source(self):
         if self.source_file_content is None:
-            self.source_file_content = ""
+            self.source_file_content = Template('module.c').render(
+                header_file_path = self.module_rel_path + '.h'
+            )
 
     def generate_header(self):
         self.compile_header()

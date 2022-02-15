@@ -124,7 +124,7 @@ ssize_t ss_ring_buffer_send(int fd, ss_ring_buffer_t *buffer, size_t max_size)
         total_nbytes_to_write -= (size_t)nbytes_written;
     }
 
-    total_written = buffer->length - init_length;
+    total_written = init_length - buffer->length;
     return (ssize_t)total_written;
 }
 
@@ -143,7 +143,7 @@ ssize_t ss_ring_buffer_steal(void *dest, ss_ring_buffer_t *src, size_t offset, s
     return ss_ring_buffer_steal_fixed(dest, src, offset, nbytes_to_read);
 }
 
-ssize_t ss_ring_buffer_write(ss_ring_buffer_t *dest, void *src, size_t max_size)
+ssize_t ss_ring_buffer_write(ss_ring_buffer_t *dest, const void *src, size_t max_size)
 {
     size_t nbytes_to_write;
     nbytes_to_write = MIN(dest->capacity - dest->length, max_size);
@@ -207,7 +207,7 @@ _l_end:
     return (ssize_t)fixed_size;
 }
 
-ssize_t ss_ring_buffer_write_fixed(ss_ring_buffer_t *dest, void *src, size_t fixed_size)
+ssize_t ss_ring_buffer_write_fixed(ss_ring_buffer_t *dest, const void *src, size_t fixed_size)
 {
     size_t nbytes;
     size_t offset;

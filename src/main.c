@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include "network/ss_network.h"
-#include "server/simple_server.h"
+#include "server/test_server.h"
 #include "server/socks5_server.h"
 
 int main(int argc, char *argv[]) {
@@ -9,12 +9,12 @@ int main(int argc, char *argv[]) {
         printf("failed to initialize network.\n");
         goto _l_end;
     }
-    if ((rc = simple_server_start()) != 0) {
-        printf("failed to start server.\n");
+    if ((rc = test_server_start()) != 0) {
+        printf("failed to start test server.\n");
         goto _l_end;
     }
     if ((rc = socks5_start(argc, argv)) != 0) {
-        printf("failed to start server.\n");
+        printf("failed to start socks5 server.\n");
         goto _l_end;
     }
     ss_network_main_loop();

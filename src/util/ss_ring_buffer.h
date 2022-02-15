@@ -29,7 +29,7 @@ ssize_t ss_ring_buffer_read(void *dest, ss_ring_buffer_t *src, size_t max_size);
 ssize_t ss_ring_buffer_steal(void *dest, ss_ring_buffer_t *src, size_t offset, size_t max_size);
 
 // read data from src (common buffer) to dest (ring buffer)
-ssize_t ss_ring_buffer_write(ss_ring_buffer_t *dest, void *src, size_t max_size);
+ssize_t ss_ring_buffer_write(ss_ring_buffer_t *dest, const void *src, size_t max_size);
 
 // read data from src (ring buffer) to dest (common buffer)
 ssize_t ss_ring_buffer_read_fixed(void *dest, ss_ring_buffer_t *src, size_t fixed_size);
@@ -38,7 +38,7 @@ ssize_t ss_ring_buffer_read_fixed(void *dest, ss_ring_buffer_t *src, size_t fixe
 ssize_t ss_ring_buffer_steal_fixed(void *dest, ss_ring_buffer_t *src, size_t offset, size_t fixed_size);
 
 // read data from src (common buffer) to dest (ring buffer)
-ssize_t ss_ring_buffer_write_fixed(ss_ring_buffer_t *dest, void *src, size_t fixed_size);
+ssize_t ss_ring_buffer_write_fixed(ss_ring_buffer_t *dest, const void *src, size_t fixed_size);
 
 size_t ss_ring_buffer_free_size(ss_ring_buffer_t *buffer);
 
