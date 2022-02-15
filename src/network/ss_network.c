@@ -20,6 +20,7 @@
 #include "network/ss_connection_def.h"
 #include "network/ss_connection.h"
 #include "util/error_utils.h"
+#include "fcntl.h"
 
 #define EPOLL_SIZE 2048
 
@@ -270,17 +271,17 @@ ss_listening_t *ss_network_listen(int type, ss_addr_t addr)
         goto _l_failed;
     }
 
-    temp = 1;
-
 #define CHECK_CALL(statement, error_message) \
     if ((rc = (statement)) != 0) { \
         printf(error_message " ERROR [%d]\n", errno); \
         goto _l_failed; \
     }
 
+    temp = 1;
     CHECK_CALL(setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (void*)&temp, sizeof(temp)), "reuse addr failed");
     CHECK_CALL(bind(fd, (struct sockaddr*)&addr, sizeof(addr)), "binding failed");
     CHECK_CALL(listen(fd, 16), "listen failed");
+    CHECK_CALL(fcntl(fd, F_SETFL, O_NONBLOCK), "set non-block flag failed");
 
 #undef CHECK_CALL
 
@@ -289,6 +290,54 @@ ss_listening_t *ss_network_listen(int type, ss_addr_t addr)
 _l_failed:
     if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, 0) != 0) {
         printf("WARNING: failed to delete listening fd [%d]\n", fd);
+    }
+    close(fd);
+    ss_network_item_delete(nitem);
+    return 0;
+}
+
+ss_connection_t *ss_network_connect(int type, ss_addr_t addr)
+{
+    int                  fd;
+    ss_connection_t     *connection;
+    ss_network_item_t   *nitem;
+    struct epoll_event   epevt;
+    int                  temp;
+    int                  rc;
+
+    fd = socket(addr.domain, type, 0);
+
+    nitem = ss_network_item_create(NIT_LISTENING);
+    connection = &nitem->item.connection;
+    connection->fd = fd;
+    connection->type = type;
+    connection->address = addr;
+
+    epevt.data.ptr = nitem;
+    epevt.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLRDHUP;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &epevt);
+
+    if (fd < 0) {
+        printf("failed to create the socket.\n");
+        goto _l_failed;
+    }
+
+#define CHECK_CALL(statement, error_message) \
+    if ((rc = (statement)) != 0) { \
+        printf(error_message " ERROR [%d]\n", errno); \
+        goto _l_failed; \
+    }
+
+    CHECK_CALL(connect(fd, (struct sockaddr*)&addr, sizeof(addr)), "connecting failed");
+    CHECK_CALL(fcntl(fd, F_SETFL, O_NONBLOCK), "set non-block flag failed");
+
+#undef CHECK_CALL
+
+    return connection;
+
+_l_failed:
+    if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, 0) != 0) {
+        printf("WARNING: failed to delete connection fd [%d]\n", fd);
     }
     close(fd);
     ss_network_item_delete(nitem);

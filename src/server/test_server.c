@@ -132,7 +132,7 @@ static void client_receive_function(int connfd, client_context_t *context)
                 if (arg_length > 0) {
                     newarg = malloc(arg_length + 1);
                     memcpy(newarg, arg, arg_length);
-                    newarg[arg_length + 1] = '\0';
+                    newarg[arg_length] = '\0';
                     context->session.argv[context->session.argc++] = newarg;
                     arg_length = 0;
                 }
@@ -146,7 +146,7 @@ static void client_receive_function(int connfd, client_context_t *context)
     if (arg_length > 0) {
         newarg = malloc(arg_length + 1);
         memcpy(newarg, arg, arg_length);
-        newarg[arg_length + 1] = '\0';
+        newarg[arg_length] = '\0';
         context->session.argv[context->session.argc++] = newarg;
         arg_length = 0;
     }
