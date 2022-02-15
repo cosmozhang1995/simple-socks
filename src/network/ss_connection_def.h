@@ -8,8 +8,8 @@
 
 typedef struct ss_connection_s ss_connection_t;
 
-typedef ss_int8_t (*ss_connection_recv_handler_t)          (ss_connection_t *connection);
-typedef ss_int8_t (*ss_connection_send_handler_t)          (ss_connection_t *connection);
+typedef void      (*ss_connection_recv_handler_t)          (ss_connection_t *connection);
+typedef void      (*ss_connection_send_handler_t)          (ss_connection_t *connection);
 typedef void      (*ss_connection_destroy_handler_t)       (ss_connection_t *connection);
 typedef ss_bool_t (*ss_connection_status_function_t)       (ss_connection_t *connection);
 
@@ -21,6 +21,7 @@ struct ss_connection_s {
     ss_connection_send_handler_t          send_handler;
     ss_connection_destroy_handler_t       destroy_handler;
     ss_connection_status_function_t       check_status;
+    void                                 *context;
 };
 
 #endif // _SS_NETWORK_SS_CONNECTION_DEF_H_

@@ -10,8 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "server/server.h"
+#include "common/ss_defs.h"
 #include "util/ss_ring_buffer.h"
+#include "network/ss_listening.h"
 #include "socks5/ss_context.h"
 #include "socks5/ss_version.h"
 #include "socks5/ss_auth_method.h"
@@ -24,11 +25,16 @@ typedef struct {
     const char *config_path;
 } ss_cli_arguments_t;
 
+static void server_destroy_handler(ss_listening_t *listening);
+
+static ss_bool_t accept_handler(ss_listening_t *listening, ss_connection_t *connection);
+static void recv_handler(ss_connection_t *connection);
+static void send_handler(ss_connection_t *connection);
+static void destroy_handler(ss_connection_t *connection);
+static ss_bool_t check_client_status(ss_connection_t *connection);
+
 static ss_context_t *create_client_context(ss_config_t *server_config);
 static void release_client_context(ss_context_t *context);
-static void client_receive_function(int fd, ss_context_t *context);
-static void client_send_function(int fd, ss_context_t *context);
-static ss_bool_t check_client_status(ss_context_t *context);
 
 static ss_cli_arguments_t get_argumetns(int argc, char *argv[])
 {
@@ -41,30 +47,63 @@ static ss_cli_arguments_t get_argumetns(int argc, char *argv[])
             result.config_path = argv[++i];
         }
     }
+
+    return result;
 }
 
-int simple_socks5_server(int argc, char *argv[])
+int simple_socks5_start(int argc, char *argv[])
 {
-    int exit_code;
-    ss_config_t *ss_config = 0;
-    server_config_t config;
-    ss_cli_arguments_t args;
+    ss_config_t             *ss_config = 0;
+    ss_cli_arguments_t       args;
+    ss_listening_t          *listening;
+    ss_addr_t                addr;
 
     args = get_argumetns(argc, argv);
     ss_config = ss_load_config(args.config_path);
-    if (!ss_config) return -1;
+    if (!ss_config) {
+        printf("failed to load config from %s\n", args.config_path);
+        return -1;
+    }
 
-    config.server_config = ss_config;
-    config.create_client_context_function = (ssbs_create_client_context_function_t)create_client_context;
-    config.release_client_context_function = (ssbs_release_client_context_function_t)release_client_context;
-    config.client_recv_handler = (ssbs_client_recv_function_t)client_receive_function;
-    config.client_send_handler = (ssbs_client_send_function_t)client_send_function;
-    config.check_client_status_function = (ssbs_check_client_status_function_t)check_client_status;
+    addr = ss_make_ipv4_addr("0.0.0.0", 1080);
+    listening = ss_network_listen(SOCK_STREAM, addr);
+    if (!listening) return -1;
+    listening->context = ss_config;
+    listening->accpet_handler = accept_handler;
+    listening->destroy_handler = server_destroy_handler;
 
-    exit_code = ss_basic_server(config);
+    return 0;
+}
 
-    if (ss_config) ss_release_config(ss_config);
-    return exit_code;
+static ss_inline
+ss_config_t * get_server_config(const ss_listening_t *listening)
+{
+    return (ss_config_t *)listening->context;
+}
+
+static ss_inline
+ss_context_t * get_client_context(const ss_connection_t *connection)
+{
+    return (ss_context_t *)connection->context;
+}
+
+static void server_destroy_handler(ss_listening_t *listening)
+{
+    ss_release_config(get_server_config(listening->context));
+}
+
+static ss_bool_t accept_handler(ss_listening_t *listening, ss_connection_t *connection)
+{
+    ss_context_t          *context;
+
+    context = create_client_context(get_server_config(listening));
+    connection->context = context;
+    connection->recv_handler = recv_handler;
+    connection->send_handler = send_handler;
+    connection->destroy_handler = destroy_handler;
+    connection->check_status = check_client_status;
+
+    return SS_TRUE;
 }
 
 static ss_context_t *create_client_context(ss_config_t *server_config)
@@ -80,9 +119,16 @@ static void release_client_context(ss_context_t *context)
     free(context);
 }
 
-static void client_receive_function(int fd, ss_context_t *context)
+
+
+static void recv_handler(ss_connection_t *connection)
 {
-    ss_int8_t retcode;
+    int           fd;
+    ss_context_t *context;
+    ss_int8_t     retcode;
+
+    fd = connection->fd;
+    context = get_client_context(connection);
     while (1) {
         switch (context->status) {
         case SS_STATUS_NEGOTIATING:
@@ -112,11 +158,22 @@ static void client_receive_function(int fd, ss_context_t *context)
     }
 }
 
-static void client_send_function(int fd, ss_context_t *context)
+static void send_handler(ss_connection_t *connection)
 {
+    int           fd;
+    ss_context_t *context;
+
+    fd = connection->fd;
+    context = get_client_context(connection);
     ss_ring_buffer_send(fd, &context->write_buffer, context->write_buffer.length);
 }
 
-static ss_bool_t check_client_status(ss_context_t *context) {
-    return context->status != SS_STATUS_DEAD || context->write_buffer.length > 0;
+static void destroy_handler(ss_connection_t *connection)
+{
+    release_client_context(get_client_context(connection));
+}
+
+static ss_bool_t check_client_status(ss_connection_t *connection) {
+    return get_client_context(connection)->status != SS_STATUS_DEAD
+        || get_client_context(connection)->write_buffer.length > 0;
 }

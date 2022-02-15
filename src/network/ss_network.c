@@ -19,6 +19,7 @@
 #include "network/ss_listening.h"
 #include "network/ss_connection_def.h"
 #include "network/ss_connection.h"
+#include "util/error_utils.h"
 
 #define EPOLL_SIZE 2048
 
@@ -59,6 +60,7 @@ int ss_network_prepare()
     if (epfd < 0) epfd = epoll_create(1024);
     if (epfd < 0) return -1;
     ss_linked_list_initialize(&network_item_list);
+    return 0;
 }
 
 int ss_network_stop()
@@ -198,17 +200,19 @@ void ss_network_handle_listening(uint32_t events, ss_network_item_t *nitem_liste
     connection->type = listening->type;
     connection->address = client_addr;
 
-    epevt.data.ptr = nitem;
-    epevt.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLRDHUP;
-    rc = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &epevt);
-    if (rc != 0) {
-        printf("failed to add fd [%d] to epoll. ERROR [%d]\n", fd, errno);
+    if (listening->accpet_handler && !listening->accpet_handler(listening, connection)) {
+        printf("connection [%d] is rejected.\n", fd);
         close(fd);
         ss_network_item_delete(nitem);
         return;
     }
-    if (listening->accpet_handler && !listening->accpet_handler(connection)) {
-        printf("connection [%d] is rejected.\n", fd);
+
+    epevt.data.ptr = nitem;
+    epevt.events = EPOLLIN | EPOLLOUT | EPOLLERR | EPOLLRDHUP;
+    rc = epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &epevt);
+
+    if (rc != 0) {
+        printf("failed to add fd [%d] to epoll. ERROR [%d]\n", fd, errno);
         close(fd);
         ss_network_item_delete(nitem);
         return;
@@ -232,15 +236,15 @@ int ss_network_item_fd(ss_network_item_t *nitem)
 static ss_inline
 void ss_network_item_close(ss_network_item_t *nitem, int fd)
 {
-    close(fd);
     if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, 0) != 0) {
-        printf("WARNING: failed to delete fd [%d] from epoll. ERROR [%d]\n", fd, errno);
+        printf("WARNING: failed to delete fd [%d] from epoll. ERROR [%s]\n", fd, translate_errno(errno));
     }
+    close(fd);
     ss_linked_list_remove(nitem->lnode);
     ss_network_item_delete(nitem);
 }
 
-ss_bool_t ss_network_listen(int type, ss_addr_t addr)
+ss_listening_t *ss_network_listen(int type, ss_addr_t addr)
 {
     int                  fd;
     ss_listening_t      *listening;
@@ -280,10 +284,13 @@ ss_bool_t ss_network_listen(int type, ss_addr_t addr)
 
 #undef CHECK_CALL
 
-    return SS_TRUE;
+    return listening;
 
 _l_failed:
+    if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, 0) != 0) {
+        printf("WARNING: failed to delete listening fd [%d]\n", fd);
+    }
     close(fd);
     ss_network_item_delete(nitem);
-    return SS_FALSE;
+    return 0;
 }

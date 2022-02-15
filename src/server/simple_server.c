@@ -9,8 +9,10 @@
 #include <errno.h>
 #include <stdlib.h>
 
-#include "server/server.h"
 #include "util/ss_ring_buffer.h"
+#include "network/ss_listening.h"
+#include "network/ss_inet.h"
+#include "network/ss_connection.h"
 
 typedef struct {
     ss_ring_buffer_t buffer;
@@ -24,14 +26,44 @@ static void client_receive_function(int connfd, client_context_t *context);
 static void client_send_function(int connfd, client_context_t *context);
 static void client_send_hexcode_function(int connfd, client_context_t *context);
 
-int simple_server() {
-    server_config_t config;
-    config.create_client_context_function = (ssbs_create_client_context_function_t)create_client_context;
-    config.release_client_context_function = (ssbs_release_client_context_function_t)release_client_context;
-    config.client_recv_handler = (ssbs_client_recv_function_t)client_receive_function;
-    config.client_send_handler = (ssbs_client_send_function_t)client_send_hexcode_function;
-    config.check_client_status_function = SS_NULL;
-    return ss_basic_server(config);
+static ss_bool_t accept_handler(ss_listening_t *listening, ss_connection_t *connection);
+static void recv_handler(ss_connection_t *connection);
+static void send_handler(ss_connection_t *connection);
+static void destroy_handler(ss_connection_t *connection);
+
+int simple_server_start()
+{
+    ss_addr_t       addr;
+    ss_listening_t *listening;
+    addr = ss_make_ipv4_addr("0.0.0.0", 2080);
+    listening = ss_network_listen(SOCK_STREAM, addr);
+    if (!listening) return -1;
+    listening->accpet_handler = accept_handler;
+    return 0;
+}
+
+static ss_bool_t accept_handler(ss_listening_t *listening, ss_connection_t *connection)
+{
+    connection->send_handler = send_handler;
+    connection->recv_handler = recv_handler;
+    connection->destroy_handler = destroy_handler;
+    connection->context = create_client_context(SS_NULL);
+    return SS_TRUE;
+}
+
+static void recv_handler(ss_connection_t *connection)
+{
+    client_receive_function(connection->fd, (client_context_t *)connection->context);
+}
+
+static void send_handler(ss_connection_t *connection)
+{
+    client_send_function(connection->fd, (client_context_t *)connection->context);
+}
+
+static void destroy_handler(ss_connection_t *connection)
+{
+    release_client_context((client_context_t *)connection->context);
 }
 
 static client_context_t *create_client_context(void *server_config)

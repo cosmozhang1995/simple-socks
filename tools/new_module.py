@@ -47,7 +47,7 @@ class CModule:
     
     def compile_source(self):
         if self.source_file_content is None:
-            self.source_file_content = None
+            self.source_file_content = ""
 
     def generate_header(self):
         self.compile_header()
