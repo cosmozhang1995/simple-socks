@@ -2,10 +2,12 @@
 
 #include <stdlib.h>
 #include <memory.h>
+#include <time.h>
 
 #include "common/ss_defs.h"
 #include "util/ss_strmap.h"
 #include "util/ss_io_helper.h"
+#include "util/ss_linked_list.h"
 #include "network/ss_connection.h"
 
 static void ss_dns_recv_handler(ss_connection_t *connection);
@@ -14,6 +16,13 @@ static void ss_dns_destroy_handler(ss_connection_t *connection);
 static ss_bool_t ss_dns_check_status(ss_connection_t *connection);
 
 #define GET_CONTEXT(connection) ((ss_dns_service_t *)connection->context)
+
+typedef ss_linked_list_t ss_dns_entry_list_t;
+
+typedef struct ss_dns_entry_s ss_dns_entry_t;
+
+static ss_dns_entry_list_t *ss_dns_list_create();
+static void ss_dns_list_release(ss_dns_entry_list_t *list);
 
 void ss_dns_service_initialize(ss_dns_service_t *service)
 {
@@ -71,6 +80,110 @@ void ss_dns_service_stop(ss_dns_service_t *service)
     ss_dns_service_disconnect(service);
 }
 
+ss_io_err_t ss_dns_fetch(ss_dns_service_t *service, const char *dn, ss_addr_t *addr)
+{
+    ss_io_err_t rc;
+    if (ss_dns_get(service, dn, addr)) {
+        return SS_IO_OK;
+    }
+    if ((rc = ss_dns_resolve_start(service, dn)) != SS_IO_OK) {
+        return rc;
+    }
+    return SS_IO_EAGAIN;
+}
+
+ss_io_err_t ss_dns_resolve_start(ss_dns_service_t *service, const char *dn)
+{
+    ss_variable_t var;
+    if (ss_strmap_get(&service->resolving_map))
+}
+
+ss_bool_t ss_dns_get(ss_dns_service_t *service, const char *dn, ss_addr_t *addr)
+{
+    ss_variable_t var;
+    if (ss_strmap_get(&service->map, dn, &var)) {
+        *addr = *((ss_addr_t *)var.ptr);
+        return SS_TRUE;
+    }
+    return SS_FALSE;
+}
+
+struct ss_dns_entry_s {
+    ss_addr_t      addr;
+    time_t         expire;
+};
+
+static ss_dns_entry_t *ss_dns_entry_create()
+{
+    ss_dns_entry_t *entry;
+    entry = malloc(sizeof(ss_dns_entry_t));
+    memset(entry, 0, sizeof(ss_dns_entry_t));
+    return entry;
+}
+
+static void ss_dns_entry_release(ss_dns_entry_t *entry)
+{
+    free(entry);
+}
+
+static ss_dns_entry_list_t *ss_dns_list_create()
+{
+    return ss_linked_list_create();
+}
+
+static void ss_dns_list_release(ss_dns_entry_list_t *list)
+{
+    ss_linked_list_release(list, (ss_linked_list_release_data_function_t)ss_dns_entry_release);
+}
+
+static ss_dns_entry_list_t *ss_dns_get_entries(ss_dns_service_t *service, const char *dn)
+{
+    ss_dns_entry_list_t  *list;
+    ss_variable_t         var;
+    if (ss_strmap_get(&service->map, dn, &var)) {
+        list = (ss_dns_entry_list_t *)var.ptr;
+    } else {
+        list = ss_dns_list_create();
+        var.ptr = list;
+        ss_strmap_put(&service->map, dn, var, SS_NULL);
+    }
+    return list;
+}
+
+static void ss_dns_update(ss_dns_service_t *service, const char *dn, ss_addr_t addr, ss_int32_t ttl)
+{
+    ss_dns_entry_list_t  *list;
+    ss_dns_entry_t       *entry, *temp;
+    time_t                now;
+    ss_bool_t             not_found;
+
+    now = time(SS_NULL);
+    not_found = SS_TRUE;
+    list = ss_dns_get_entries(service, dn);
+    ss_linked_node_t *node, *next;
+    for (
+        node = list->head->next;
+        node != list->tail;
+        node = next
+    ) {
+        next = node->next;
+        temp = (ss_dns_entry_t *)node->data;
+        if (not_found && ss_addr_equal(temp->addr, addr)) {
+            not_found = SS_FALSE;
+            temp->expire = now + ttl;
+        } else if (temp->expire < now) {
+            ss_dns_entry_release(temp);
+            ss_linked_list_remove(node);
+        }
+    }
+    if (not_found) {
+        entry = ss_dns_entry_create();
+        entry->expire = now + ttl;
+        entry->addr = addr;
+        ss_linked_list_prepend(list, entry);
+    }
+}
+
 typedef struct ss_dns_header_s ss_dns_header_t;
 
 typedef struct ss_dns_rr_s ss_dns_rr_t;
@@ -83,8 +196,6 @@ struct ss_dns_header_s {
     ss_uint16_t   nauthorities;
     ss_uint16_t   nadditionals;
 };
-
-#define SS_DNS_
 
 static ss_io_err_t recv_query(int fd, ss_dns_service_t *service, size_t *offset);
 static ss_io_err_t recv_answer(int fd, ss_dns_service_t *service, size_t *offset);
@@ -205,6 +316,7 @@ static ss_io_err_t recv_query(int fd, ss_dns_service_t *service, size_t *offset)
 #define SS_RR_TYPE_MINFO           14  // mailbox or mail list information
 #define SS_RR_TYPE_MX              15  // mail exchange
 #define SS_RR_TYPE_TXT             16  // text strings
+#define SS_RR_TYPE_AAAA            28  // ipv6 address
 
 #define SS_RR_CLASS_IN              1  // the Internet
 #define SS_RR_CLASS_CS              2  // the CSNET class
@@ -234,7 +346,7 @@ typedef struct ss_dns_rr_meta_s ss_dns_rr_meta_t;
 struct ss_dns_rr_meta_s {
     ss_uint16_t  type;
     ss_uint16_t  class;
-    ss_uint16_t  ttl;
+    ss_int32_t   ttl;
     ss_uint16_t  rdlength;
 };
 
@@ -256,8 +368,9 @@ static void ss_dns_rr_uninitialize(ss_dns_rr_t *rr)
     if (rr->rdata) free(rr->rdata);
 }
 
-static ss_io_err_t recv_rdata_a(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_meta_t meta, void *data);
-static ss_io_err_t recv_rdata_any(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_meta_t meta, void *data);
+static ss_io_err_t recv_rdata_a(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_t *rr);
+static ss_io_err_t recv_rdata_aaaa(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_t *rr);
+static ss_io_err_t recv_rdata_any(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_t *rr);
 
 static ss_io_err_t recv_rr(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_t *rr)
 {
@@ -274,14 +387,62 @@ static ss_io_err_t recv_rr(int fd, ss_dns_service_t *service, size_t *offset, ss
         printf("ERROR: Unsupported RR class %s\n", translate_rr_class(rr->meta.class));
     }
     // receive RDATA
-    // if (!ss_recv_via_buffer_auto_inc(&rr->meta, fd, &service->recv_buffer, offset, sizeof(rr->meta))) {
-    //     return 1;
-    // }
+    switch (rr->meta.type) {
+    case SS_RR_TYPE_A:
+        rc = recv_rdata_a(fd, service, offset, rr);
+        break;
+    default:
+        rc = recv_rdata_any(fd, service, offset, rr);
+        break;
+    }
+    return rc;
 }
 
-static ss_io_err_t recv_rdata_a(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_meta_t meta, void *data)
+static ss_io_err_t recv_rdata_a(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_t *rr)
 {
-    if (meta.rdlength)
+    ss_addr_t             addr;
+    ss_io_err_t           rc;
+    ss_dns_entry_t       *entry;
+    ss_dns_entry_list_t  *entry_list;
+    time_t                now;
+
+    if (rr->meta.rdlength != sizeof(addr.ipv4.sin_addr))
+        return SS_IO_ERROR;
+    if ((rc = ss_recv_via_buffer_auto_inc(&addr.ipv4.sin_addr, fd, &service->recv_buffer, offset, sizeof(addr.ipv4.sin_addr))) != SS_IO_OK)
+        return rc;
+    if (rr->meta.ttl > 0) {
+        addr.ipv4.sin_family = AF_INET;
+        addr.ipv4.sin_port = 0;
+        ss_dns_update(service, rr->name, addr, rr->meta.ttl);
+    }
+    return SS_IO_OK;
+}
+
+static ss_io_err_t recv_rdata_aaaa(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_t *rr)
+{
+    ss_addr_t             addr;
+    ss_io_err_t           rc;
+    ss_dns_entry_t       *entry;
+    ss_dns_entry_list_t  *entry_list;
+    time_t                now;
+
+    if (rr->meta.rdlength != sizeof(addr.ipv6.sin6_addr))
+        return SS_IO_ERROR;
+    if ((rc = ss_recv_via_buffer_auto_inc(&addr.ipv6.sin6_addr, fd, &service->recv_buffer, offset, sizeof(addr.ipv6.sin6_addr))) != SS_IO_OK)
+        return rc;
+    if (rr->meta.ttl > 0) {
+        addr.ipv6.sin6_family = AF_INET6;
+        addr.ipv6.sin6_port = 0;
+        ss_dns_update(service, rr->name, addr, rr->meta.ttl);
+    }
+    return SS_IO_OK;
+}
+
+static ss_io_err_t recv_rdata_aaaa(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_t *rr);
+
+static ss_io_err_t recv_rdata_any(int fd, ss_dns_service_t *service, size_t *offset, ss_dns_rr_t *rr)
+{
+    return ss_recv_via_buffer_auto_inc(SS_NULL, fd, &service->recv_buffer, offset, rr->meta.rdlength);
 }
 
 static ss_io_err_t recv_answer(int fd, ss_dns_service_t *service, size_t *offset)
