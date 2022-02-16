@@ -26,22 +26,26 @@ ss_int8_t ss_auth_plain_process(int fd, ss_context_t *context)
     char username[256], password[256];
     ss_variable_t temp_var;
     ss_auth_plain_response_t resp;
-   
+    ss_io_err_t rc;
+
     ctx = &context->auth.context.plain;
-    if (!ss_recv_via_buffer((void*)&version, fd, &context->read_buffer, offset, sizeof(version)))
-        goto _l_again;
+    offset = 0;
+    if ((rc = ss_recv_via_buffer_auto_inc((void*)&version, fd, &context->read_buffer, &offset, sizeof(version))) != SS_IO_OK)
+        goto _l_error;
     if (version != SS_AUTH_PLAIN_VERSION)
         goto _l_error;
-    if (!ss_recv_via_buffer((void*)&ulen, fd, &context->read_buffer, offset, sizeof(ulen)))
-        goto _l_again;
-    if (!ss_recv_via_buffer((void*)username, fd, &context->read_buffer, offset, ulen))
-        goto _l_again;
+    if ((rc = ss_recv_via_buffer_auto_inc((void*)&ulen, fd, &context->read_buffer, &offset, sizeof(ulen))) != SS_IO_OK)
+        goto _l_error;
+    if ((rc = ss_recv_via_buffer_auto_inc((void*)username, fd, &context->read_buffer, &offset, ulen)) != SS_IO_OK)
+        goto _l_error;
     username[(size_t)ulen] = '\0';
-    if (!ss_recv_via_buffer((void*)&plen, fd, &context->read_buffer, offset, sizeof(plen)))
-        goto _l_again;
-    if (!ss_recv_via_buffer((void*)password, fd, &context->read_buffer, offset, plen))
-        goto _l_again;
+    if ((rc = ss_recv_via_buffer_auto_inc((void*)&plen, fd, &context->read_buffer, &offset, sizeof(plen))) != SS_IO_OK)
+        goto _l_error;
+    if ((rc = ss_recv_via_buffer_auto_inc((void*)password, fd, &context->read_buffer, &offset, plen)) != SS_IO_OK)
+        goto _l_error;
     password[(size_t)plen] = '\0';
+
+    ss_ring_buffer_read(SS_NULL, &context->read_buffer, offset);
 
     resp.version = SS_AUTH_PLAIN_VERSION;
 
@@ -58,7 +62,9 @@ _l_success:
 _l_failed:
     resp.status = SS_AUTH_PLAIN_STATUS_FAILED;
     ss_buffered_write(context, &resp, sizeof(resp));
+
 _l_error:
+    if (rc == SS_IO_EAGAIN) goto _l_again;
     return SS_PROCESS_ERROR;
 
 _l_again:

@@ -20,15 +20,16 @@ ss_int8_t ss_negotiate_process(int fd, ss_context_t *context)
     size_t offset = 0;
     ss_hello_response_t resp;
     int i;
+    ss_io_err_t rc;
 
-    if (!ss_recv_via_buffer_auto_inc((void*)&ss_version, fd, context, &offset, sizeof(ss_version))) \
-        goto _l_again;
+    if ((rc = ss_recv_via_buffer_auto_inc((void*)&ss_version, fd, context, &offset, sizeof(ss_version))) != SS_IO_OK)
+        goto _l_error;
     if (ss_version != SOCKS5_VERSION)
         goto _l_error;
-    if (!ss_recv_via_buffer_auto_inc((void*)&n_methods, fd, context, &offset, sizeof(n_methods))) \
-        goto _l_again;
-    if (!ss_recv_via_buffer(0, fd, &context->read_buffer, offset, (size_t)n_methods))
-        goto _l_again;
+    if ((rc = ss_recv_via_buffer_auto_inc((void*)&n_methods, fd, context, &offset, sizeof(n_methods))) != SS_IO_OK)
+        goto _l_error;
+    if ((rc = ss_recv_via_buffer(0, fd, &context->read_buffer, offset, (size_t)n_methods)) != SS_IO_OK)
+        goto _l_error;
 
     context->auth_method = SOCKS5_AUTH_NO_ACCEPTABLE;
     while (n_methods-- > 0) {
@@ -40,6 +41,7 @@ ss_int8_t ss_negotiate_process(int fd, ss_context_t *context)
     }
 
 _l_error:
+    if (rc == SS_IO_EAGAIN) goto _l_again;
     ss_client_kill(context);
     return SS_PROCESS_ERROR;
 
