@@ -23,3 +23,14 @@ ss_io_err_t ss_recv_via_buffer_auto_inc(void *dest, int fd, ss_ring_buffer_t *bu
     *offset += size;
     return SS_IO_OK;
 }
+
+ss_io_err_t ss_send_via_buffer(ss_ring_buffer_t *buffer, void *src, size_t size)
+{
+    if (buffer->length < size) {
+        return SS_IO_EAGAIN;
+    }
+    if (ss_ring_buffer_write_fixed(buffer, src, size) != size) {
+        return SS_IO_ERROR;
+    }
+    return SS_IO_OK;
+}

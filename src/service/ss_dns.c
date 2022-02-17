@@ -10,6 +10,29 @@
 #include "util/ss_linked_list.h"
 #include "network/ss_connection.h"
 
+#define SS_TYPE_A                1  // a host address
+#define SS_TYPE_NS               2  // an authoritative name server
+#define SS_TYPE_MD               3  // a mail destination (Obsolete - use MX)
+#define SS_TYPE_MF               4  // a mail forwarder (Obsolete - use MX)
+#define SS_TYPE_CNAME            5  // the canonical name for an alias
+#define SS_TYPE_SOA              6  // marks the start of a zone of authority
+#define SS_TYPE_MB               7  // a mailbox domain name (EXPERIMENTAL)
+#define SS_TYPE_MG               8  // a mail group member (EXPERIMENTAL)
+#define SS_TYPE_MR               9  // a mail rename domain name (EXPERIMENTAL)
+#define SS_TYPE_NULL            10  // a null RR (EXPERIMENTAL)
+#define SS_TYPE_WKS             11  // a well known service description
+#define SS_TYPE_PTR             12  // a domain name pointer
+#define SS_TYPE_HINFO           13  // host information
+#define SS_TYPE_MINFO           14  // mailbox or mail list information
+#define SS_TYPE_MX              15  // mail exchange
+#define SS_TYPE_TXT             16  // text strings
+#define SS_TYPE_AAAA            28  // ipv6 address
+
+#define SS_CLASS_IN              1  // the Internet
+#define SS_CLASS_CS              2  // the CSNET class
+#define SS_CLASS_CH              3  // the CHAOS class
+#define SS_CLASS_HS              4  // Hesiod [Dyer 87]
+
 typedef struct ss_dns_service_wrapper_s ss_dns_service_wrapper_t;
 
 struct ss_dns_service_wrapper_s {
@@ -42,37 +65,39 @@ typedef struct ss_dns_header_s ss_dns_header_t;
 
 static void ss_dns_header_query(ss_dns_header_t *header, ss_uint16_t tid, ss_uint16_t nqueries);
 
-static ss_bool_t allocate_tid(ss_dns_service_wrapper_t *service, ss_bool_t *tid);
+static ss_bool_t next_tid(ss_dns_service_wrapper_t *service, ss_uint16_t *tid);
+static ss_bool_t allocate_tid(ss_dns_service_wrapper_t *service, ss_uint16_t *tid);
+static void occupy_tid(ss_dns_service_wrapper_t *service, ss_uint16_t tid);
 static void release_tid(ss_dns_service_wrapper_t *service, ss_uint16_t tid);
 static ss_inline ss_uint16_t is_tid_free(ss_uint16_t *flags, ss_uint16_t tid);
 
 
 
-static ss_inline ss_dns_service_wrapper_t *ss_dns_service_start_inner(ss_addr_t addr);
+static ss_dns_service_wrapper_t *ss_dns_service_start_inner(ss_addr_t addr);
 ss_dns_service_t *ss_dns_service_start(ss_addr_t addr)
 {
     return (ss_dns_service_t *)ss_dns_service_start(addr);
 }
 
-static ss_inline void ss_dns_service_stop_inner(ss_dns_service_wrapper_t *);
+static void ss_dns_service_stop_inner(ss_dns_service_wrapper_t *);
 void ss_dns_service_stop(ss_dns_service_t *service)
 {
     ss_dns_service_stop_inner((ss_dns_service_wrapper_t *)service);
 }
 
-static ss_inline ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *domain_name, ss_addr_t *addr);
+static ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *domain_name, ss_addr_t *addr);
 ss_io_err_t ss_dns_fetch(ss_dns_service_t *service, const char *domain_name, ss_addr_t *addr)
 {
     return ss_dns_fetch_inner((ss_dns_service_wrapper_t *)service, domain_name, addr);
 }
 
-static ss_inline ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const char *domain_name);
+static ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const char *domain_name);
 ss_io_err_t ss_dns_resolve_start(ss_dns_service_t *service, const char *domain_name)
 {
     return ss_dns_resolve_start_inner((ss_dns_service_wrapper_t *)service, domain_name);
 }
 
-static ss_inline ss_bool_t ss_dns_get_inner(ss_dns_service_wrapper_t *service, const char *domain_name, ss_addr_t *addr);
+static ss_bool_t ss_dns_get_inner(ss_dns_service_wrapper_t *service, const char *domain_name, ss_addr_t *addr);
 ss_bool_t ss_dns_get(ss_dns_service_t *service, const char *domain_name, ss_addr_t *addr)
 {
     return ss_dns_get_inner((ss_dns_service_wrapper_t *)service, domain_name, addr);
@@ -126,18 +151,25 @@ void ss_dns_service_release(ss_dns_service_wrapper_t *service)
     free(service);
 }
 
-static ss_inline
+static
 ss_dns_service_wrapper_t *ss_dns_service_start_inner(ss_addr_t addr)
 {
 }
 
-static ss_inline
+static
 void ss_dns_service_stop_inner(ss_dns_service_wrapper_t *service)
 {
     ss_dns_service_disconnect(service);
 }
 
-static ss_inline
+typedef struct ss_dns_question_tail_s ss_dns_question_tail_t;
+
+struct ss_dns_question_tail_s {
+    ss_uint16_t qtype;
+    ss_uint16_t qclass;
+};
+
+static
 ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *dn, ss_addr_t *addr)
 {
     ss_io_err_t rc;
@@ -150,17 +182,52 @@ ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *dn
     return SS_IO_EAGAIN;
 }
 
-static ss_inline
+static
 ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const char *dn)
 {
-    ss_variable_t var;
-    ss_dns_header_t header;
+    ss_variable_t             var;
+    ss_uint16_t               tid;
+    ss_uint8_t                data[sizeof(ss_dns_header_t) + SS_DNML + sizeof(ss_dns_question_tail_t)];
+    ss_dns_header_t          *header;
+    ss_dns_question_tail_t   *tail;
+    size_t                    dnlen;
+    ss_uint8_t               *dndata;
+    size_t                    i;
+    ss_uint8_t                labelsz;
     if (ss_strmap_get(&service->resolving_map, dn, &var)) {
         return SS_IO_EAGAIN;
     }
+    dnlen = strlen(dn);
+    if (dnlen > SS_DNML) {
+        return SS_IO_ERROR;
+    }
+    header = (ss_dns_header_t *)data;
+    dndata = (char *)(data + sizeof(header));
+    tail = (char *)(data + sizeof(header) + dnlen + 2);
+    strcpy((char *)dndata, dn);
+    dndata[dnlen + 1] = 0;
+    labelsz = 0;
+    for (i = dnlen; i > 0; i--) {
+        if (dndata[i] == (ss_uint8_t)'.') {
+            dndata[i] = labelsz;
+            labelsz = 0;
+        } else {
+            labelsz++;
+        }
+    }
+    dndata[0] = labelsz;
+    tail->qtype = SS_TYPE_A;
+    tail->qclass = SS_CLASS_IN;
+    if (!next_tid(service, &tid)) {
+        return SS_IO_EAGAIN;
+    }
+    ss_dns_header_query(data, tid, 1);
+    if (ss_send_via_buffer(&service->send_buffer, &header, sizeof(header)) != SS_IO_OK) {
+        
+    }
 }
 
-static ss_inline
+static
 ss_bool_t ss_dns_get_inner(ss_dns_service_wrapper_t *service, const char *dn, ss_addr_t *addr)
 {
     ss_variable_t var;
@@ -390,40 +457,17 @@ static ss_io_err_t recv_query(int fd, ss_dns_service_wrapper_t *service, size_t 
     return SS_IO_OK;
 }
 
-#define SS_RR_TYPE_A                1  // a host address
-#define SS_RR_TYPE_NS               2  // an authoritative name server
-#define SS_RR_TYPE_MD               3  // a mail destination (Obsolete - use MX)
-#define SS_RR_TYPE_MF               4  // a mail forwarder (Obsolete - use MX)
-#define SS_RR_TYPE_CNAME            5  // the canonical name for an alias
-#define SS_RR_TYPE_SOA              6  // marks the start of a zone of authority
-#define SS_RR_TYPE_MB               7  // a mailbox domain name (EXPERIMENTAL)
-#define SS_RR_TYPE_MG               8  // a mail group member (EXPERIMENTAL)
-#define SS_RR_TYPE_MR               9  // a mail rename domain name (EXPERIMENTAL)
-#define SS_RR_TYPE_NULL            10  // a null RR (EXPERIMENTAL)
-#define SS_RR_TYPE_WKS             11  // a well known service description
-#define SS_RR_TYPE_PTR             12  // a domain name pointer
-#define SS_RR_TYPE_HINFO           13  // host information
-#define SS_RR_TYPE_MINFO           14  // mailbox or mail list information
-#define SS_RR_TYPE_MX              15  // mail exchange
-#define SS_RR_TYPE_TXT             16  // text strings
-#define SS_RR_TYPE_AAAA            28  // ipv6 address
-
-#define SS_RR_CLASS_IN              1  // the Internet
-#define SS_RR_CLASS_CS              2  // the CSNET class
-#define SS_RR_CLASS_CH              3  // the CHAOS class
-#define SS_RR_CLASS_HS              4  // Hesiod [Dyer 87]
-
 static ss_inline
 const char *translate_rr_class(ss_uint16_t cls)
 {
     switch (cls) {
-    case SS_RR_CLASS_IN:
+    case SS_CLASS_IN:
         return "IN";
-    case SS_RR_CLASS_CS:
+    case SS_CLASS_CS:
         return "CS";
-    case SS_RR_CLASS_CH:
+    case SS_CLASS_CH:
         return "CH";
-    case SS_RR_CLASS_HS:
+    case SS_CLASS_HS:
         return "HS";
     default:
         break;
@@ -473,13 +517,16 @@ static ss_io_err_t recv_rr(int fd, ss_dns_service_wrapper_t *service, size_t *of
     if ((rc = ss_recv_via_buffer_auto_inc(rr ? &rr->meta : SS_NULL, fd, &service->recv_buffer, offset, sizeof(rr->meta))) != SS_IO_OK) {
         return 1;
     }
-    if (rr->meta.class != SS_RR_CLASS_IN) {
+    if (rr->meta.class != SS_CLASS_IN) {
         printf("ERROR: Unsupported RR class %s\n", translate_rr_class(rr->meta.class));
     }
     // receive RDATA
     switch (rr->meta.type) {
-    case SS_RR_TYPE_A:
+    case SS_TYPE_A:
         rc = recv_rdata_a(fd, service, offset, rr);
+        break;
+    case SS_TYPE_AAAA:
+        rc = recv_rdata_aaaa(fd, service, offset, rr);
         break;
     default:
         rc = recv_rdata_any(fd, service, offset, rr);
@@ -570,34 +617,100 @@ static ss_bool_t ss_dns_check_status(ss_connection_t *connection)
     return !service->dead;
 }
 
-#define ALLOCATE_TID_MAX_ATTEMPTS 16
+// NOTES about TID (transaction-ID):
+// We use service.tid_flags to mark the occupations of TIDs. The flag has 65536
+// bits, representing TID 0 to 65535. The flag is seperated into 4096 segments,
+// with each segment representing 16 TIDs. For example, segment 0 represents TID
+// 0 to 15, segment 1 represents TID 16 to 31, etc. For each segment, if stored
+// in big-endian format, the lowest bit represents the minimum TID, while the
+// highest bit represents the maximum TID. For example, for segment 0, the value
+// 0x4005 represents that TID 16, 18 and 30 are occupied, while the others are
+// available.
 
+/**
+ * @brief Idempotently get an available TID, without marking it as occupied.
+ * 
+ * @param service the DNS service instance
+ * @param result the result TID
+ * @return ss_bool_t True if successfully. False on failure.
+ */
 static
-ss_bool_t allocate_tid(ss_dns_service_wrapper_t *service, ss_bool_t *dest)
+ss_bool_t next_tid(ss_dns_service_wrapper_t *service, ss_uint16_t *result)
 {
-    int          i;
-    ss_uint16_t  tid, edge, flag;
+    ss_uint16_t  i;
+    ss_uint16_t  tid, seg, flag, temp;
     ss_uint16_t *flags;
     flags = service->tid_flags;
-    edge = service->next_tid & 0xFFF0;
-    for (i = 0; i < ALLOCATE_TID_MAX_ATTEMPTS; i++) {
-        flag = flags[tid >> 4];
-        if (flag == 0) {
-            edge += 0x0010;
+    seg = service->next_tid >> 4;
+    for (i = 0; i < 0x1000; i++) {
+        flag = flags[seg];
+        if (flag == 0xFFFF) {
+            seg = (seg + 1) & 0x0FFF;
             continue;
         }
-        flag = ~flag;
         for (tid = 0; tid < 0x0010; tid++) {
-            
+            if ((temp = flag | (1 << tid)) == flag) continue;
+            *result = seg | tid;
+            return SS_TRUE;
         }
-        service->next_tid = tid + 1;
-        flags[tid >> 4] |= (1 << (tid & 0xF));
-        *dest = tid;
-        return SS_TRUE;
+        return SS_FALSE;
     }
     return SS_FALSE;
 }
 
+/**
+ * @brief Get an available TID, and mark it as occupied.
+ * 
+ * @param service the DNS service instance
+ * @param result the result TID
+ * @return ss_bool_t True if successfully. False on failure.
+ */
+static
+ss_bool_t allocate_tid(ss_dns_service_wrapper_t *service, ss_uint16_t *result)
+{
+    ss_uint16_t  i;
+    ss_uint16_t  tid, seg, flag, temp;
+    ss_uint16_t *flags;
+    flags = service->tid_flags;
+    seg = service->next_tid >> 4;
+    for (i = 0; i < 0x1000; i++) {
+        flag = flags[seg];
+        if (flag == 0xFFFF) {
+            seg = (seg + 1) & 0x0FFF;
+            continue;
+        }
+        for (tid = 0; tid < 0x0010; tid++) {
+            if ((temp = flag | (1 << tid)) == flag) continue;
+            flags[seg] = temp;
+            tid = seg | tid;
+            service->next_tid = tid + 1;
+            *result = tid;
+            return SS_TRUE;
+        }
+        return SS_FALSE;
+    }
+    return SS_FALSE;
+}
+
+/**
+ * @brief Mark a TID as occupied.
+ * 
+ * @param service 
+ * @param tid 
+ */
+static
+void occupy_tid(ss_dns_service_wrapper_t *service, ss_uint16_t tid)
+{
+    service->tid_flags[tid >> 4] |= (1 << (tid & 0xF));
+    service->next_tid = tid + 1;
+}
+
+/**
+ * @brief Mark a TID as available.
+ * 
+ * @param service 
+ * @param tid 
+ */
 static
 void release_tid(ss_dns_service_wrapper_t *service, ss_uint16_t tid)
 {

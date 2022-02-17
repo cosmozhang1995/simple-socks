@@ -5,6 +5,5 @@
 #include "socks5/ss_context.h"
 
 void ss_client_kill(ss_context_t *context);
-ssize_t ss_buffered_write(ss_context_t *context, void *data, size_t size);
 
 #endif

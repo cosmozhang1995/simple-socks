@@ -56,12 +56,12 @@ ss_int8_t ss_auth_plain_process(int fd, ss_context_t *context)
 
 _l_success:
     resp.status = SS_AUTH_PLAIN_STATUS_SUCCESS;
-    ss_buffered_write(context, &resp, sizeof(resp));
+    ss_send_via_buffer(&context->write_buffer, &resp, sizeof(resp));
     return SS_PROCESS_DONE;
     
 _l_failed:
     resp.status = SS_AUTH_PLAIN_STATUS_FAILED;
-    ss_buffered_write(context, &resp, sizeof(resp));
+    ss_send_via_buffer(&context->write_buffer, &resp, sizeof(resp));
 
 _l_error:
     if (rc == SS_IO_EAGAIN) goto _l_again;

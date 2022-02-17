@@ -48,7 +48,7 @@ _l_error:
 _l_success:
     resp.version = SOCKS5_VERSION;
     resp.method = context->auth_method;
-    if (ss_buffered_write(context, &resp, sizeof(resp)) < 0) {
+    if (ss_send_via_buffer(&context->write_buffer, &resp, sizeof(resp)) != SS_IO_OK) {
         ss_client_kill(context);
         return SS_PROCESS_ERROR;
     }
