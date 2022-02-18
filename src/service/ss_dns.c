@@ -54,12 +54,12 @@ static ss_bool_t ss_dns_check_status(ss_connection_t *connection);
 
 #define GET_CONTEXT(connection) ((ss_dns_service_wrapper_t *)connection->context)
 
-typedef ss_linked_list_t ss_dns_entry_list_t;
-
 typedef struct ss_dns_entry_s ss_dns_entry_t;
+typedef ss_linked_list_t ss_dns_record_list_t;
+typedef struct ss_dns_record_s ss_dns_record_t;
 
-static ss_dns_entry_list_t *ss_dns_list_create();
-static void ss_dns_list_release(ss_dns_entry_list_t *list);
+static ss_dns_record_list_t *ss_dns_list_create();
+static void ss_dns_list_release(ss_dns_record_list_t *list);
 
 typedef struct ss_dns_header_s ss_dns_header_t;
 
@@ -71,6 +71,7 @@ static void occupy_tid(ss_dns_service_wrapper_t *service, ss_uint16_t tid);
 static void release_tid(ss_dns_service_wrapper_t *service, ss_uint16_t tid);
 static ss_inline ss_uint16_t is_tid_free(ss_uint16_t *flags, ss_uint16_t tid);
 
+static void encode_domain_name(void *dest, const char *dn, size_t dnlen);
 
 
 static ss_dns_service_wrapper_t *ss_dns_service_start_inner(ss_addr_t addr);
@@ -169,6 +170,14 @@ struct ss_dns_question_tail_s {
     ss_uint16_t qclass;
 };
 
+/**
+ * @brief Fetch a DNS resolved address for the specified domain name. If no local storage, start a new request.
+ * 
+ * @param service service instance
+ * @param dn domain name
+ * @param addr fetched address
+ * @return ss_io_err_t OK for success. EAGIAN if requesting. Otherwise for failure.
+ */
 static
 ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *dn, ss_addr_t *addr)
 {
@@ -182,18 +191,35 @@ ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *dn
     return SS_IO_EAGAIN;
 }
 
+/**
+ * @brief Start a DNS query. This will send 2 questions, for IPv4 and IPv6 addresses respectively.
+ * 
+ * @param service service instance
+ * @param dn domain name
+ * @return ss_io_err_t 
+ */
 static
 ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const char *dn)
 {
     ss_variable_t             var;
     ss_uint16_t               tid;
-    ss_uint8_t                data[sizeof(ss_dns_header_t) + SS_DNML + sizeof(ss_dns_question_tail_t)];
+    ss_uint8_t                data[
+                                sizeof(ss_dns_header_t)
+                                + SS_DNML
+                                + sizeof(ss_dns_question_tail_t)
+                                + SS_DNML
+                                + sizeof(ss_dns_question_tail_t)];
     ss_dns_header_t          *header;
-    ss_dns_question_tail_t   *tail;
+    ss_dns_question_tail_t   *ques_a_tail;
+    ss_dns_question_tail_t   *ques_aaaa_tail;
     size_t                    dnlen;
-    ss_uint8_t               *dndata;
+    void                     *ques_a_dn;
+    void                     *ques_aaaa_dn;
     size_t                    i;
     ss_uint8_t                labelsz;
+    size_t                    reqlen;
+    ss_io_err_t               rc;
+
     if (ss_strmap_get(&service->resolving_map, dn, &var)) {
         return SS_IO_EAGAIN;
     }
@@ -201,30 +227,38 @@ ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const 
     if (dnlen > SS_DNML) {
         return SS_IO_ERROR;
     }
+    reqlen = 0;
     header = (ss_dns_header_t *)data;
-    dndata = (char *)(data + sizeof(header));
-    tail = (char *)(data + sizeof(header) + dnlen + 2);
-    strcpy((char *)dndata, dn);
-    dndata[dnlen + 1] = 0;
-    labelsz = 0;
-    for (i = dnlen; i > 0; i--) {
-        if (dndata[i] == (ss_uint8_t)'.') {
-            dndata[i] = labelsz;
-            labelsz = 0;
-        } else {
-            labelsz++;
-        }
-    }
-    dndata[0] = labelsz;
-    tail->qtype = SS_TYPE_A;
-    tail->qclass = SS_CLASS_IN;
+    reqlen += sizeof(ss_dns_header_t);
+    ques_a_dn = (void *)(data + reqlen);
+    reqlen += dnlen + 2;
+    ques_a_tail = (ss_dns_question_tail_t *)(data + reqlen);
+    reqlen += sizeof(ss_dns_question_tail_t);
+    ques_aaaa_dn = (void *)(data + reqlen);
+    reqlen += dnlen + 2;
+    ques_aaaa_tail = (ss_dns_question_tail_t *)(data + reqlen);
+    reqlen += sizeof(ss_dns_question_tail_t);
+    // initialize header data
     if (!next_tid(service, &tid)) {
         return SS_IO_EAGAIN;
     }
-    ss_dns_header_query(data, tid, 1);
-    if (ss_send_via_buffer(&service->send_buffer, &header, sizeof(header)) != SS_IO_OK) {
-        
+    ss_dns_header_query(data, tid, 2);
+    // initialize A question QNAME
+    encode_domain_name(ques_a_dn, dn, dnlen);
+    // initialize A question tail
+    ques_a_tail->qtype = SS_TYPE_A;
+    ques_a_tail->qclass = SS_CLASS_IN;
+    // initialize AAAA question QNAME, which is same to A question QNAME
+    memcpy((void *)ques_aaaa_dn, (void *)ques_a_dn, dnlen + 2);
+    // initialize AAAA question tail
+    ques_aaaa_tail->qtype = SS_TYPE_AAAA;
+    ques_aaaa_tail->qclass = SS_CLASS_IN;
+    // write question
+    if ((rc = ss_send_via_buffer(&service->send_buffer, data, reqlen)) != SS_IO_OK) {
+        return SS_IO_ERROR;
     }
+    occupy_tid(service, tid);
+    return SS_IO_OK;
 }
 
 static
@@ -239,51 +273,82 @@ ss_bool_t ss_dns_get_inner(ss_dns_service_wrapper_t *service, const char *dn, ss
 }
 
 struct ss_dns_entry_s {
+    ss_bool_t             requesting;
+    ss_dns_record_list_t  list;
+};
+
+struct ss_dns_record_s {
     ss_addr_t      addr;
     time_t         expire;
 };
+
+static ss_dns_record_t *ss_dns_record_create()
+{
+    ss_dns_record_t *entry;
+    entry = malloc(sizeof(ss_dns_record_t));
+    memset(entry, 0, sizeof(ss_dns_record_t));
+    return entry;
+}
+
+static void ss_dns_record_release(ss_dns_record_t *entry)
+{
+    free(entry);
+}
+
+static void ss_dns_list_initialize(ss_dns_record_list_t *list)
+{
+    ss_linked_list_initialize(list);
+}
+
+static void ss_dns_list_uninitialize(ss_dns_record_list_t *list)
+{
+    ss_linked_list_uninitialize(list, (ss_linked_list_release_data_function_t)ss_dns_record_release);
+}
 
 static ss_dns_entry_t *ss_dns_entry_create()
 {
     ss_dns_entry_t *entry;
     entry = malloc(sizeof(ss_dns_entry_t));
-    memset(entry, 0, sizeof(ss_dns_entry_t));
+    entry->requesting = SS_FALSE;
+    ss_dns_list_initialize(&entry->list);
     return entry;
 }
 
 static void ss_dns_entry_release(ss_dns_entry_t *entry)
 {
+    ss_dns_list_uninitialize(&entry->list);
     free(entry);
 }
 
-static ss_dns_entry_list_t *ss_dns_list_create()
+static ss_inline
+ss_dns_entry_t *ss_dns_get_entry(ss_dns_service_wrapper_t *service, const char *dn)
 {
-    return ss_linked_list_create();
-}
-
-static void ss_dns_list_release(ss_dns_entry_list_t *list)
-{
-    ss_linked_list_release(list, (ss_linked_list_release_data_function_t)ss_dns_entry_release);
-}
-
-static ss_dns_entry_list_t *ss_dns_get_entries(ss_dns_service_wrapper_t *service, const char *dn)
-{
-    ss_dns_entry_list_t  *list;
     ss_variable_t         var;
     if (ss_strmap_get(&service->map, dn, &var)) {
-        list = (ss_dns_entry_list_t *)var.ptr;
+        return (ss_dns_entry_t *)var.ptr;
+    }
+    return SS_NULL;
+}
+
+static ss_inline
+ss_dns_entry_t *ss_dns_entry(ss_dns_service_wrapper_t *service, const char *dn)
+{
+    ss_dns_entry_t        *entry;
+    ss_variable_t          var;
+    if (ss_strmap_get(&service->map, dn, &var)) {
+        return (ss_dns_entry_t *)var.ptr;
     } else {
-        list = ss_dns_list_create();
-        var.ptr = list;
+        entry = ss_dns_entry_create();
+        var.ptr = entry;
         ss_strmap_put(&service->map, dn, var, SS_NULL);
     }
-    return list;
+    return entry;
 }
 
 static void ss_dns_update(ss_dns_service_wrapper_t *service, const char *dn, ss_addr_t addr, ss_int32_t ttl)
 {
-    ss_dns_entry_list_t  *list;
-    ss_dns_entry_t       *entry, *temp;
+    ss_dns_record_list_t  *list;
+    ss_dns_record_t       *entry, *temp;
     time_t                now;
     ss_bool_t             not_found;
 
@@ -297,7 +362,7 @@ static void ss_dns_update(ss_dns_service_wrapper_t *service, const char *dn, ss_
         node = next
     ) {
         next = node->next;
-        temp = (ss_dns_entry_t *)node->data;
+        temp = (ss_dns_record_t *)node->data;
         if (not_found && ss_addr_equal(temp->addr, addr)) {
             not_found = SS_FALSE;
             temp->expire = now + ttl;
@@ -539,8 +604,8 @@ static ss_io_err_t recv_rdata_a(int fd, ss_dns_service_wrapper_t *service, size_
 {
     ss_addr_t             addr;
     ss_io_err_t           rc;
-    ss_dns_entry_t       *entry;
-    ss_dns_entry_list_t  *entry_list;
+    ss_dns_record_t       *entry;
+    ss_dns_record_list_t  *entry_list;
     time_t                now;
 
     if (rr->meta.rdlength != sizeof(addr.ipv4.sin_addr))
@@ -559,8 +624,8 @@ static ss_io_err_t recv_rdata_aaaa(int fd, ss_dns_service_wrapper_t *service, si
 {
     ss_addr_t             addr;
     ss_io_err_t           rc;
-    ss_dns_entry_t       *entry;
-    ss_dns_entry_list_t  *entry_list;
+    ss_dns_record_t       *entry;
+    ss_dns_record_list_t  *entry_list;
     time_t                now;
 
     if (rr->meta.rdlength != sizeof(addr.ipv6.sin6_addr))
@@ -721,5 +786,27 @@ static ss_inline
 ss_uint16_t is_tid_free(ss_uint16_t *flags, ss_uint16_t tid)
 {
     return flags[tid >> 4] & (1 << (tid & 0xF));
+}
+
+static
+void encode_domain_name(void *dest, const char *dn, size_t dnlen)
+{
+    size_t       i;
+    size_t       labelsz;
+    ss_uint8_t  *data;
+    if (dnlen == 0) dnlen = strlen(dn);
+    data = dest;
+    memcpy(dest + 1, (void *)dn, dnlen);
+    data[dnlen + 1] = 0;
+    labelsz = 0;
+    for (i = dnlen; i > 0; i--) {
+        if (data[i] == (ss_uint8_t)'.') {
+            data[i] = labelsz;
+            labelsz = 0;
+        } else {
+            labelsz++;
+        }
+    }
+    data[0] = labelsz;
 }
 
