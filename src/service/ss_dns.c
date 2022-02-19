@@ -104,6 +104,10 @@ static ss_inline ss_dns_entry_t *ss_dns_get_entry(ss_dns_service_wrapper_t *serv
 static ss_inline ss_dns_entry_t *ss_dns_entry(ss_dns_service_wrapper_t *service, const char *dn);
 
 
+static void ss_dns_header_hton(ss_dns_header_t *header);
+static void ss_dns_header_ntoh(ss_dns_header_t *header);
+
+
 static ss_dns_service_wrapper_t *ss_dns_service_start_inner(ss_addr_t addr);
 ss_dns_service_t *ss_dns_service_start(ss_addr_t addr)
 {
@@ -211,6 +215,9 @@ struct ss_dns_question_tail_s {
     ss_uint16_t qclass;
 };
 
+static void ss_dns_question_tail_hton(ss_dns_question_tail_t *tail);
+static void ss_dns_question_tail_ntoh(ss_dns_question_tail_t *tail);
+
 /**
  * @brief Fetch a DNS resolved address for the specified domain name. If no local storage, start a new request.
  * 
@@ -280,25 +287,28 @@ ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const 
     reqlen += dnlen + 2;
     ques_a_tail = (ss_dns_question_tail_t *)(data + reqlen);
     reqlen += sizeof(ss_dns_question_tail_t);
-    ques_aaaa_dn = (void *)(data + reqlen);
-    reqlen += dnlen + 2;
-    ques_aaaa_tail = (ss_dns_question_tail_t *)(data + reqlen);
-    reqlen += sizeof(ss_dns_question_tail_t);
+    // ques_aaaa_dn = (void *)(data + reqlen);
+    // reqlen += dnlen + 2;
+    // ques_aaaa_tail = (ss_dns_question_tail_t *)(data + reqlen);
+    // reqlen += sizeof(ss_dns_question_tail_t);
     // initialize header data
     if (!next_tid(service, &tid)) {
         return SS_IO_EAGAIN;
     }
-    ss_dns_header_query(header, tid, 2);
+    ss_dns_header_query(header, tid, 1);
+    ss_dns_header_hton(header);
     // initialize A question QNAME
     encode_domain_name(ques_a_dn, dn, dnlen);
     // initialize A question tail
     ques_a_tail->qtype = SS_TYPE_A;
     ques_a_tail->qclass = SS_CLASS_IN;
-    // initialize AAAA question QNAME, which is same to A question QNAME
-    memcpy((void *)ques_aaaa_dn, (void *)ques_a_dn, dnlen + 2);
-    // initialize AAAA question tail
-    ques_aaaa_tail->qtype = SS_TYPE_AAAA;
-    ques_aaaa_tail->qclass = SS_CLASS_IN;
+    ss_dns_question_tail_hton(ques_a_tail);
+    // // initialize AAAA question QNAME, which is same to A question QNAME
+    // memcpy((void *)ques_aaaa_dn, (void *)ques_a_dn, dnlen + 2);
+    // // initialize AAAA question tail
+    // ques_aaaa_tail->qtype = SS_TYPE_AAAA;
+    // ques_aaaa_tail->qclass = SS_CLASS_IN;
+    // ss_dns_question_tail_hton(ques_aaaa_tail);
     // write question
     if ((rc = ss_send_via_buffer(&service->send_buffer, data, reqlen)) != SS_IO_OK) {
         return SS_IO_ERROR;
@@ -494,6 +504,10 @@ static void ss_dns_recv_handler(ss_connection_t *connection)
     if ((rc = ss_recv_via_buffer_auto_inc(&header, connection->fd, &service->recv_buffer, &offset, sizeof(header))) != SS_IO_OK) {
         goto _l_error;
     }
+    ss_dns_header_ntoh(&header);
+    if (header.flags & SS_DNS_FLAG_RCODE != SS_DNS_FLAG_RC_OK) {
+        goto _l_error;
+    }
     for (i = 0; i < header.nqueries; i++) {
         if ((rc = recv_query(connection->fd, service, &offset)) != SS_IO_OK) goto _l_error;
     }
@@ -606,6 +620,9 @@ struct ss_dns_rr_meta_s {
     ss_uint16_t  rdlength;
 };
 
+static void ss_dns_rr_meta_hton(ss_dns_rr_meta_t *meta);
+static void ss_dns_rr_meta_ntoh(ss_dns_rr_meta_t *meta);
+
 typedef union ss_dns_rdata_u ss_dns_rdata_t;
 
 union ss_dns_rdata_u {
@@ -653,6 +670,7 @@ static ss_io_err_t recv_rr(int fd, ss_dns_service_wrapper_t *service, size_t *of
     if ((rc = ss_recv_via_buffer_auto_inc(&rr->meta, fd, &service->recv_buffer, offset, sizeof(rr->meta))) != SS_IO_OK) {
         return 1;
     }
+    ss_dns_rr_meta_ntoh(&rr->meta);
     if (rr->meta.class != SS_CLASS_IN) {
         printf("ERROR: Unsupported RR class %s\n", translate_rr_class(rr->meta.class));
     }
@@ -892,5 +910,56 @@ void encode_domain_name(void *dest, const char *dn, size_t dnlen)
         }
     }
     data[0] = labelsz;
+}
+
+
+static void ss_dns_header_hton(ss_dns_header_t *header)
+{
+    header->tid = htons(header->tid);
+    header->flags = htons(header->flags);
+    header->nqueries = htons(header->nqueries);
+    header->nanswers = htons(header->nanswers);
+    header->nauthorities = htons(header->nauthorities);
+    header->nadditionals = htons(header->nadditionals);
+}
+
+static void ss_dns_header_ntoh(ss_dns_header_t *header)
+{
+    header->tid = ntohs(header->tid);
+    header->flags = ntohs(header->flags);
+    header->nqueries = ntohs(header->nqueries);
+    header->nanswers = ntohs(header->nanswers);
+    header->nauthorities = ntohs(header->nauthorities);
+    header->nadditionals = ntohs(header->nadditionals);
+}
+
+
+static void ss_dns_question_tail_hton(ss_dns_question_tail_t *tail)
+{
+    tail->qtype = htons(tail->qtype);
+    tail->qclass = htons(tail->qclass);
+}
+
+static void ss_dns_question_tail_ntoh(ss_dns_question_tail_t *tail)
+{
+    tail->qtype = ntohs(tail->qtype);
+    tail->qclass = ntohs(tail->qclass);
+}
+
+
+static void ss_dns_rr_meta_hton(ss_dns_rr_meta_t *meta)
+{
+    meta->type = htons(meta->type);
+    meta->class = htons(meta->class);
+    meta->ttl = htonl(meta->ttl);
+    meta->rdlength = htons(meta->rdlength);
+}
+
+static void ss_dns_rr_meta_ntoh(ss_dns_rr_meta_t *meta)
+{
+    meta->type = ntohs(meta->type);
+    meta->class = ntohs(meta->class);
+    meta->ttl = ntohl(meta->ttl);
+    meta->rdlength = ntohs(meta->rdlength);
 }
 

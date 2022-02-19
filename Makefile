@@ -10,6 +10,7 @@ HEADERS = \
 	$(CURDIR)/src/util/*.h       \
 	$(CURDIR)/src/socks5/*.h     \
 	$(CURDIR)/src/network/*.h    \
+	$(CURDIR)/src/service/*.h    \
 	$(CURDIR)/src/testing/*.h    \
 
 SOURCES = \
@@ -17,6 +18,7 @@ SOURCES = \
 	$(CURDIR)/src/util/*.c       \
 	$(CURDIR)/src/socks5/*.c     \
 	$(CURDIR)/src/network/*.c    \
+	$(CURDIR)/src/service/*.c    \
 	$(CURDIR)/src/testing/*.c    \
 	$(CURDIR)/src/*.c
 
