@@ -17,4 +17,6 @@ ss_addr_t ss_make_ipv4_addr(const char *addrstr, in_port_t port);
 
 ss_bool_t ss_addr_equal(ss_addr_t, ss_addr_t);
 
+int ss_addr_format(char *dest, const char *format, ss_addr_t addr);
+
 #endif // _SS_NETWORK_SS_INET_H_

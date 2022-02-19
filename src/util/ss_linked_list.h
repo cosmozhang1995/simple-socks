@@ -23,6 +23,11 @@ void ss_linked_list_release(ss_linked_list_t *list,
 ss_linked_node_t *ss_linked_list_append(ss_linked_list_t *list, void *data);
 ss_linked_node_t *ss_linked_list_prepend(ss_linked_list_t *list, void *data);
 ss_linked_node_t *ss_linked_list_insert(ss_linked_node_t *before, void *data);
+ss_linked_node_t *ss_linked_list_append_node(ss_linked_list_t *list, ss_linked_node_t *node);
+ss_linked_node_t *ss_linked_list_prepend_node(ss_linked_list_t *list, ss_linked_node_t *node);
+ss_linked_node_t *ss_linked_list_insert_node(ss_linked_node_t *before, ss_linked_node_t *node);
+ss_linked_node_t *ss_linked_list_pop_node_front(ss_linked_list_t *list);
 void ss_linked_list_remove(ss_linked_node_t *node);
+void ss_linked_list_detach(ss_linked_node_t *node);
 
 #endif

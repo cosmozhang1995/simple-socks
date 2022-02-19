@@ -15,18 +15,20 @@ typedef struct {
 
 ss_int8_t ss_negotiate_process(int fd, ss_context_t *context)
 {
-    ssize_t rc;
-    ss_uint8_t ss_version, n_methods, method;
-    size_t offset = 0;
-    ss_hello_response_t resp;
-    int i;
-    ss_io_err_t rc;
+    ss_uint8_t             ss_version;
+    ss_uint8_t             n_methods;
+    ss_uint8_t             method;
+    size_t                 offset;
+    ss_hello_response_t    resp;
+    int                    i;
+    ss_io_err_t            rc;
 
-    if ((rc = ss_recv_via_buffer_auto_inc((void*)&ss_version, fd, context, &offset, sizeof(ss_version))) != SS_IO_OK)
+    offset = 0;
+    if ((rc = ss_recv_via_buffer_auto_inc((void*)&ss_version, fd, &context->read_buffer, &offset, sizeof(ss_version))) != SS_IO_OK)
         goto _l_error;
     if (ss_version != SOCKS5_VERSION)
         goto _l_error;
-    if ((rc = ss_recv_via_buffer_auto_inc((void*)&n_methods, fd, context, &offset, sizeof(n_methods))) != SS_IO_OK)
+    if ((rc = ss_recv_via_buffer_auto_inc((void*)&n_methods, fd, &context->read_buffer, &offset, sizeof(n_methods))) != SS_IO_OK)
         goto _l_error;
     if ((rc = ss_recv_via_buffer(0, fd, &context->read_buffer, offset, (size_t)n_methods)) != SS_IO_OK)
         goto _l_error;

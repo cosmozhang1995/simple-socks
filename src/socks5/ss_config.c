@@ -170,7 +170,7 @@ _l_error:
     return -1;
 }
 
-static ss_bool_t strmap_release_string_value(const char *key, ss_variable_t *value) {
+static ss_bool_t strmap_release_string_value(const char *key, ss_variable_t *value, void *arg) {
     if (value->ptr) {
         free(value->ptr);
         value->ptr = SS_NULL;
@@ -193,7 +193,7 @@ static ss_int8_t parse_auth_plain(const char *filepath, ss_auth_plain_config_t *
         if (ss_string_empty(username) || ss_string_empty(password)) continue;
         mapvalue.ptr = ss_string_clone(password);
         if (ss_strmap_put(&config->map, username, mapvalue, &temp))
-            strmap_release_string_value(0, &temp);
+            strmap_release_string_value(SS_NULL, &temp, SS_NULL);
     }
     if (rc < 0) return -1;
     return 0;
@@ -206,6 +206,6 @@ static void auth_plain_initialize(ss_auth_plain_config_t *config)
 
 static void auth_plain_uninitialize(ss_auth_plain_config_t *config)
 {
-    ss_strmap_foreach(&config->map, strmap_release_string_value);
+    ss_strmap_foreach(&config->map, strmap_release_string_value, SS_NULL);
     ss_strmap_uninitialize(&config->map);
 }

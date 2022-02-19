@@ -162,35 +162,35 @@ ss_bool_t ss_strmap_erase(ss_strmap_t *map, const char *key, ss_variable_t *eras
 }
 
 static void ss_strmap_foreach_inner(ss_rbtree_t *tree, ss_rbtree_node_t *node,
-    ss_strmap_visitor_t function)
+    ss_strmap_visitor_t function, void *argument)
 {
     ss_strmap_node_t *mnode;
     if (node == SS_NULL || node == tree->sentinel) return;
     mnode = (ss_strmap_node_t *)node;
-    ss_strmap_foreach_inner(tree, mnode->node.left, function);
-    if (function) function(mnode->key, &mnode->value);
-    ss_strmap_foreach_inner(tree, mnode->node.right, function);
+    ss_strmap_foreach_inner(tree, mnode->node.left, function, argument);
+    if (function) function(mnode->key, &mnode->value, argument);
+    ss_strmap_foreach_inner(tree, mnode->node.right, function, argument);
 }
 
-void ss_strmap_foreach(ss_strmap_t *map, ss_strmap_visitor_t function)
+void ss_strmap_foreach(ss_strmap_t *map, ss_strmap_visitor_t function, void *argument)
 {
-    ss_strmap_foreach_inner(&map->tree, map->tree.root, function);
+    ss_strmap_foreach_inner(&map->tree, map->tree.root, function, argument);
 }
 
 static void ss_strmap_release_inner(ss_rbtree_t *tree, ss_rbtree_node_t *node,
-    ss_strmap_visitor_t release_function)
+    ss_strmap_visitor_t release_function, void *argument)
 {
     ss_strmap_node_t *mnode;
     if (node == SS_NULL || node == tree->sentinel) return;
     mnode = (ss_strmap_node_t *)node;
-    ss_strmap_release_inner(tree, mnode->node.left, release_function);
-    ss_strmap_release_inner(tree, mnode->node.right, release_function);
-    if (release_function) release_function(mnode->key, &mnode->value);
+    ss_strmap_release_inner(tree, mnode->node.left, release_function, argument);
+    ss_strmap_release_inner(tree, mnode->node.right, release_function, argument);
+    if (release_function) release_function(mnode->key, &mnode->value, argument);
     ss_strmap_node_release(mnode);
 }
 
-void ss_strmap_clear(ss_strmap_t *map, ss_strmap_visitor_t release_function)
+void ss_strmap_clear(ss_strmap_t *map, ss_strmap_visitor_t release_function, void *argument)
 {
-    ss_strmap_release_inner(&map->tree, map->tree.root, release_function);
+    ss_strmap_release_inner(&map->tree, map->tree.root, release_function, argument);
     ss_rbtree_init(&map->tree, &map->sentinel, ss_strmap_comparator);
 }

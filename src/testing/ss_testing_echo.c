@@ -4,7 +4,14 @@
 
 #include "util/ss_ring_buffer.h"
 
-void ss_testing_comamnd_echo(ss_testing_session_t *session)
+const ss_testing_command_t ss_testing_comamnd_echo = {
+    SS_NULL,
+    SS_NULL,
+    ss_testing_comamnd_echo_processor,
+    SS_NULL
+};
+
+void ss_testing_comamnd_echo_processor(ss_testing_session_t *session)
 {
     int         i;
     const char *eol       = "\n\r";

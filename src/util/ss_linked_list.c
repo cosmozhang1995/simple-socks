@@ -2,6 +2,12 @@
 
 #include <stdlib.h>
 
+#include "common/ss_defs.h"
+#include "common/ss_types.h"
+
+static ss_inline void linkde_node_detach(ss_linked_node_t *node);
+static ss_inline void linked_node_insert_before(ss_linked_node_t *node, ss_linked_node_t *before);
+
 static ss_linked_node_t *linked_node_create(void *data)
 {
     ss_linked_node_t *node = malloc(sizeof(ss_linked_node_t));
@@ -53,27 +59,75 @@ void ss_linked_list_release(ss_linked_list_t *list, ss_linked_list_release_data_
 
 ss_linked_node_t *ss_linked_list_append(ss_linked_list_t *list, void *data)
 {
-    return ss_linked_list_insert(list->tail, data);
+    ss_linked_node_t *node;
+    node = linked_node_create(data);
+    linked_node_insert_before(node, list->tail);
+    return node;
 }
 
 ss_linked_node_t *ss_linked_list_prepend(ss_linked_list_t *list, void *data)
 {
-    return ss_linked_list_insert(list->head, data);
+    ss_linked_node_t *node;
+    node = linked_node_create(data);
+    linked_node_insert_before(node, list->head);
+    return node;
 }
 
 ss_linked_node_t *ss_linked_list_insert(ss_linked_node_t *before, void *data)
 {
-    ss_linked_node_t *prev, *node;
-    prev = before->prev;
+    ss_linked_node_t *node;
     node = linked_node_create(data);
-    if (prev) prev->next = node;
-    node->prev = prev;
-    node->next = before;
-    before->prev = node;
+    linked_node_insert_before(node, before);
+    return node;
+}
+
+ss_linked_node_t *ss_linked_list_append_node(ss_linked_list_t *list, ss_linked_node_t *node)
+{
+    linked_node_insert_before(node, list->tail);
+    return node;
+}
+
+ss_linked_node_t *ss_linked_list_prepend_node(ss_linked_list_t *list, ss_linked_node_t *node)
+{
+    linked_node_insert_before(node, list->head);
+    return node;
+}
+
+ss_linked_node_t *ss_linked_list_insert_node(ss_linked_node_t *before, ss_linked_node_t *node)
+{
+    linked_node_insert_before(node, before);
+    return node;
+}
+
+ss_linked_node_t *ss_linked_list_pop_node_front(ss_linked_list_t *list)
+{
+    ss_linked_node_t *node;
+    node = list->head->next;
+    if (node == SS_NULL || node == list->tail) {
+        return SS_NULL;
+    }
+    linkde_node_detach(node);
     return node;
 }
 
 void ss_linked_list_remove(ss_linked_node_t *node)
+{
+    linkde_node_detach(node);
+    free(node);
+}
+
+void ss_linked_list_detach(ss_linked_node_t *node)
+{
+    linkde_node_detach(node);
+}
+
+
+
+
+
+
+static ss_inline
+void linkde_node_detach(ss_linked_node_t *node)
 {
     ss_linked_node_t *prev, *next;
     prev = node->prev;
@@ -82,5 +136,15 @@ void ss_linked_list_remove(ss_linked_node_t *node)
     if (next) next->prev = prev;
     node->prev = 0;
     node->next = 0;
-    free(node);
+}
+
+static ss_inline
+void linked_node_insert_before(ss_linked_node_t *node, ss_linked_node_t *before)
+{
+    ss_linked_node_t *prev;
+    prev = before->prev;
+    if (prev) prev->next = node;
+    node->prev = prev;
+    node->next = before;
+    before->prev = node;
 }

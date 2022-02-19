@@ -80,7 +80,7 @@ int ss_network_stop()
         }
         node->data = SS_NULL;
     }
-    ss_linked_list_release(&network_item_list, SS_NULL);
+    ss_linked_list_uninitialize(&network_item_list, SS_NULL);
     return 0;
 }
 
@@ -190,7 +190,7 @@ void ss_network_handle_listening(uint32_t events, ss_network_item_t *nitem_liste
     client_addr_len = sizeof(client_addr);
     fd = accept(listening->fd, (struct sockaddr *)&client_addr, &client_addr_len);
     if (fd < 0) {
-        printf("failed to establish connection. ERROR [%d]\n", errno);
+        printf("failed to establish connection. ERROR [%s]\n", translate_errno(errno));
         return;
     }
     fcntl(fd, F_SETFL, O_NONBLOCK);
@@ -307,7 +307,7 @@ ss_connection_t *ss_network_connect(int type, ss_addr_t addr)
 
     fd = socket(addr.domain, type, 0);
 
-    nitem = ss_network_item_create(NIT_LISTENING);
+    nitem = ss_network_item_create(NIT_CONNECTION);
     connection = &nitem->item.connection;
     connection->fd = fd;
     connection->type = type;

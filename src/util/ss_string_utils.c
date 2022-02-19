@@ -52,13 +52,13 @@ ss_uint32_t ss_string_hash(const char *str)
     while (1) {
 
 #define LOOP_STATEMENTS                                     \
-        if ((ch == *(data++)) == 0) break;                  \
+        if ((ch = *(data++)) == 0) break;                   \
         tmp = tmp | (((ss_uint32_t)ch) << 24);              \
-        if ((ch == *(data++)) == 0) break;                  \
+        if ((ch = *(data++)) == 0) break;                   \
         tmp = tmp | (((ss_uint32_t)ch) << 16);              \
-        if ((ch == *(data++)) == 0) break;                  \
+        if ((ch = *(data++)) == 0) break;                   \
         tmp = tmp | (((ss_uint32_t)ch) <<  8);              \
-        if ((ch == *(data++)) == 0) break;                  \
+        if ((ch = *(data++)) == 0) break;                   \
         tmp = tmp | (ss_uint32_t)ch;                        \
         total = total ^ tmp;                                \
         tmp = 0;

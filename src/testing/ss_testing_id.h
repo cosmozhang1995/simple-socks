@@ -1,0 +1,8 @@
+#ifndef _SS_TESTING_SS_TESTING_ID_H_
+#define _SS_TESTING_SS_TESTING_ID_H_
+
+#define SS_TESTING_CMDID_QUIT       0
+#define SS_TESTING_CMDID_ECHO       1
+#define SS_TESTING_CMDID_DNS        2
+
+#endif // _SS_TESTING_SS_TESTING_ID_H_

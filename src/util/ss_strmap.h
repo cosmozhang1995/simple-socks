@@ -3,7 +3,7 @@
 
 #include "util/ss_strmap_def.h"
 
-typedef ss_bool_t (*ss_strmap_visitor_t) (const char *key, ss_variable_t *value);
+typedef ss_bool_t (*ss_strmap_visitor_t) (const char *key, ss_variable_t *value, void *argument);
 
 void ss_strmap_initialize(ss_strmap_t *map);
 
@@ -16,8 +16,8 @@ ss_bool_t ss_strmap_put(ss_strmap_t *map, const char *key, ss_variable_t value, 
 
 ss_bool_t ss_strmap_erase(ss_strmap_t *map, const char *key, ss_variable_t *erased_value);
 
-void ss_strmap_foreach(ss_strmap_t *map, ss_strmap_visitor_t function);
+void ss_strmap_foreach(ss_strmap_t *map, ss_strmap_visitor_t function, void *argument);
 
-void ss_strmap_clear(ss_strmap_t *map, ss_strmap_visitor_t release_function);
+void ss_strmap_clear(ss_strmap_t *map, ss_strmap_visitor_t release_function, void *argument);
 
 #endif

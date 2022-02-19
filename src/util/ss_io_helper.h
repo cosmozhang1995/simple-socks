@@ -15,4 +15,6 @@ ss_io_err_t ss_recv_via_buffer(void *dest, int fd, ss_ring_buffer_t *buffer, siz
 ss_io_err_t ss_recv_via_buffer_auto_inc(void *dest, int fd, ss_ring_buffer_t *buffer, size_t *offset, size_t size);
 ss_io_err_t ss_send_via_buffer(ss_ring_buffer_t *buffer, void *src, size_t size);
 
+const char *ss_translate_io_err(ss_io_err_t err);
+
 #endif // _SS_UTIL_SS_IO_HELPER_H_

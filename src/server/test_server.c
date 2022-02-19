@@ -17,13 +17,13 @@
 #include "testing/ss_testing_interface.h"
 
 typedef struct client_context_s {
-    ss_ring_buffer_t buffer;
-    size_t nbytes_sent;
-    ss_testing_session_t session;
-    ss_bool_t dead;
+    ss_ring_buffer_t        buffer;
+    size_t                  nbytes_sent;
+    ss_testing_session_t    session;
+    ss_bool_t               dead;
 } client_context_t;
 
-static client_context_t *create_client_context(void *server_config);
+static client_context_t *create_client_context(void *server);
 static void release_client_context(client_context_t *context);
 static void client_receive_function(int connfd, client_context_t *context);
 static void client_send_function(int connfd, client_context_t *context);
@@ -39,22 +39,25 @@ static ss_bool_t check_status(ss_connection_t *connection);
 
 int test_server_start()
 {
-    ss_addr_t       addr;
-    ss_listening_t *listening;
+    ss_addr_t             addr;
+    ss_listening_t       *listening;
+    ss_testing_server_t  *server;
 
-    ss_testing_start();
+    server = ss_testing_start();
 
     addr = ss_make_ipv4_addr("0.0.0.0", 2080);
     listening = ss_network_listen(SOCK_STREAM, addr);
     if (!listening) return -1;
     listening->accpet_handler = accept_handler;
+    listening->destroy_handler = server_destroy_handler;
+    listening->context = server;
 
     return 0;
 }
 
 static void server_destroy_handler(ss_listening_t *listening)
 {
-    ss_testing_stop();
+    ss_testing_stop((ss_testing_server_t *)listening->context);
 }
 
 static ss_bool_t accept_handler(ss_listening_t *listening, ss_connection_t *connection)
@@ -62,7 +65,7 @@ static ss_bool_t accept_handler(ss_listening_t *listening, ss_connection_t *conn
     connection->send_handler = send_handler;
     connection->recv_handler = recv_handler;
     connection->destroy_handler = destroy_handler;
-    connection->context = create_client_context(SS_NULL);
+    connection->context = create_client_context(listening->context);
     connection->check_status = check_status;
     return SS_TRUE;
 }
@@ -82,13 +85,13 @@ static void destroy_handler(ss_connection_t *connection)
     release_client_context((client_context_t *)connection->context);
 }
 
-static client_context_t *create_client_context(void *server_config)
+static client_context_t *create_client_context(void *server)
 {
     client_context_t *context = malloc(sizeof(client_context_t));
     ss_ring_buffer_initialize(&context->buffer, 1024);
     context->nbytes_sent = 0;
     context->dead = SS_FALSE;
-    ss_testing_session_initialize(&context->session);
+    ss_testing_session_initialize(&context->session, (ss_testing_server_t *)server);
     return context;
 }
 
@@ -156,6 +159,7 @@ static void client_receive_function(int connfd, client_context_t *context)
 
 static void client_send_function(int connfd, client_context_t *context)
 {
+    ss_testing_poll(&context->session);
     if (context->session.response_buffer.length != 0) {
         ss_ring_buffer_send(connfd, &context->session.response_buffer, context->session.response_buffer.length);
     }
