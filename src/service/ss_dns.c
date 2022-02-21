@@ -543,6 +543,10 @@ _l_error:
     return;
 }
 
+static ss_io_err_t read_domain_name_from_data(ss_dns_service_wrapper_t *service, size_t offset, char *domain)
+{
+}
+
 static ss_io_err_t read_domain_name(ss_dns_service_wrapper_t *service, size_t *offset, char *domain)
 {
     ss_uint8_t   label_length;
