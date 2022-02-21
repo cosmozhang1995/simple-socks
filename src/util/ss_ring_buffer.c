@@ -7,7 +7,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-ss_ring_buffer_t *ss_ring_buffer_create(size_t capacity)
+ss_ring_buffer_t *ss_ring_buffer_create(ss_size_t capacity)
 {
     ss_ring_buffer_t *buffer = malloc(sizeof(ss_ring_buffer_t));
     ss_ring_buffer_initialize(buffer, capacity);
@@ -20,7 +20,7 @@ void ss_ring_buffer_release(ss_ring_buffer_t *buffer)
     free(buffer);
 }
 
-void ss_ring_buffer_initialize(ss_ring_buffer_t *buffer, size_t capacity)
+void ss_ring_buffer_initialize(ss_ring_buffer_t *buffer, ss_size_t capacity)
 {
     buffer->buffer = malloc(capacity);
     buffer->capacity = capacity;
@@ -35,7 +35,7 @@ void ss_ring_buffer_uninitialize(ss_ring_buffer_t *buffer)
     ss_ring_buffer_reset(buffer);
 }
 
-static int handle_recv_result(ssize_t result, size_t desired_recv_bytes, ss_ring_buffer_t *buffer)
+static int handle_recv_result(ss_ssize_t result, ss_size_t desired_recv_bytes, ss_ring_buffer_t *buffer)
 {
     int recv_errno;
     if (result == 0) {
@@ -61,12 +61,12 @@ static int handle_recv_result(ssize_t result, size_t desired_recv_bytes, ss_ring
     }
 }
 
-ssize_t ss_ring_buffer_recv(int fd, ss_ring_buffer_t *buffer, size_t max_size)
+ss_ssize_t ss_ring_buffer_recv(int fd, ss_ring_buffer_t *buffer, ss_size_t max_size)
 {
-    size_t total_nbytes_to_read, nbytes_to_read;
-    ssize_t recv_ret;
-    size_t init_lenght, total_read;
-    size_t offset;
+    ss_size_t total_nbytes_to_read, nbytes_to_read;
+    ss_ssize_t recv_ret;
+    ss_size_t init_lenght, total_read;
+    ss_size_t offset;
 
     init_lenght = buffer->length;
     
@@ -82,7 +82,7 @@ ssize_t ss_ring_buffer_recv(int fd, ss_ring_buffer_t *buffer, size_t max_size)
             goto _l_end;
     }
     
-    total_nbytes_to_read -= (size_t)recv_ret;
+    total_nbytes_to_read -= (ss_size_t)recv_ret;
     if (total_nbytes_to_read == 0)
         goto _l_end;
     offset = (buffer->offset + buffer->length) % buffer->capacity;
@@ -96,17 +96,17 @@ ssize_t ss_ring_buffer_recv(int fd, ss_ring_buffer_t *buffer, size_t max_size)
 
 _l_end:
     total_read = buffer->length - init_lenght;
-    return (ssize_t)total_read;
+    return (ss_ssize_t)total_read;
 }
 
 #define MAX(x, y) ((x) < (y) ? y : x)
 #define MIN(x, y) ((x) < (y) ? x : y)
 #define CHUNK_SIZE 512
-ssize_t ss_ring_buffer_send(int fd, ss_ring_buffer_t *buffer, size_t max_size)
+ss_ssize_t ss_ring_buffer_send(int fd, ss_ring_buffer_t *buffer, ss_size_t max_size)
 {
-    size_t total_nbytes_to_write, nbytes_to_write;
-    ssize_t nbytes_written;
-    size_t init_length, total_written;
+    ss_size_t total_nbytes_to_write, nbytes_to_write;
+    ss_ssize_t nbytes_written;
+    ss_size_t init_length, total_written;
 
     init_length = buffer->length;
     total_nbytes_to_write = max_size;
@@ -119,40 +119,40 @@ ssize_t ss_ring_buffer_send(int fd, ss_ring_buffer_t *buffer, size_t max_size)
         nbytes_written = send(fd, (void*)(buffer->buffer + buffer->offset), nbytes_to_write, MSG_NOSIGNAL);
         if (nbytes_written <= 0)
             break;
-        buffer->offset = (buffer->offset + (size_t)nbytes_written) % buffer->capacity;
+        buffer->offset = (buffer->offset + (ss_size_t)nbytes_written) % buffer->capacity;
         buffer->length -= nbytes_written;
-        total_nbytes_to_write -= (size_t)nbytes_written;
+        total_nbytes_to_write -= (ss_size_t)nbytes_written;
     }
 
     total_written = init_length - buffer->length;
-    return (ssize_t)total_written;
+    return (ss_ssize_t)total_written;
 }
 
-ssize_t ss_ring_buffer_read(void *dest, ss_ring_buffer_t *src, size_t max_size)
+ss_ssize_t ss_ring_buffer_read(void *dest, ss_ring_buffer_t *src, ss_size_t max_size)
 {
-    size_t nbytes_to_read;
+    ss_size_t nbytes_to_read;
     nbytes_to_read = MIN(src->length, max_size);
     return ss_ring_buffer_read_fixed(dest, src, nbytes_to_read);
 }
 
-ssize_t ss_ring_buffer_steal(void *dest, ss_ring_buffer_t *src, size_t offset, size_t max_size)
+ss_ssize_t ss_ring_buffer_steal(void *dest, ss_ring_buffer_t *src, ss_size_t offset, ss_size_t max_size)
 {
-    size_t nbytes_to_read;
+    ss_size_t nbytes_to_read;
     if (src->length < offset) return 0;
     nbytes_to_read = MIN(src->length - offset, max_size);
     return ss_ring_buffer_steal_fixed(dest, src, offset, nbytes_to_read);
 }
 
-ssize_t ss_ring_buffer_write(ss_ring_buffer_t *dest, const void *src, size_t max_size)
+ss_ssize_t ss_ring_buffer_write(ss_ring_buffer_t *dest, const void *src, ss_size_t max_size)
 {
-    size_t nbytes_to_write;
+    ss_size_t nbytes_to_write;
     nbytes_to_write = MIN(dest->capacity - dest->length, max_size);
     return ss_ring_buffer_write_fixed(dest, src, nbytes_to_write);
 }
 
-ssize_t ss_ring_buffer_read_fixed(void *dest, ss_ring_buffer_t *src, size_t fixed_size)
+ss_ssize_t ss_ring_buffer_read_fixed(void *dest, ss_ring_buffer_t *src, ss_size_t fixed_size)
 {
-    size_t nbytes;
+    ss_size_t nbytes;
 
     if (src->length < fixed_size) return -1;
     if (!dest) {
@@ -175,13 +175,13 @@ ssize_t ss_ring_buffer_read_fixed(void *dest, ss_ring_buffer_t *src, size_t fixe
     src->length -= nbytes;
 
 _l_end:
-    return (ssize_t)fixed_size;
+    return (ss_ssize_t)fixed_size;
 }
 
-ssize_t ss_ring_buffer_steal_fixed(void *dest, ss_ring_buffer_t *src, size_t offset, size_t fixed_size)
+ss_ssize_t ss_ring_buffer_steal_fixed(void *dest, ss_ring_buffer_t *src, ss_size_t offset, ss_size_t fixed_size)
 {
-    size_t nbytes;
-    size_t length, capacity;
+    ss_size_t nbytes;
+    ss_size_t length, capacity;
 
     if (src->length < offset + fixed_size) return -1;
     if (!dest) goto _l_end;
@@ -204,13 +204,13 @@ ssize_t ss_ring_buffer_steal_fixed(void *dest, ss_ring_buffer_t *src, size_t off
     length -= nbytes;
 
 _l_end:
-    return (ssize_t)fixed_size;
+    return (ss_ssize_t)fixed_size;
 }
 
-ssize_t ss_ring_buffer_write_fixed(ss_ring_buffer_t *dest, const void *src, size_t fixed_size)
+ss_ssize_t ss_ring_buffer_write_fixed(ss_ring_buffer_t *dest, const void *src, ss_size_t fixed_size)
 {
-    size_t nbytes;
-    size_t offset;
+    ss_size_t nbytes;
+    ss_size_t offset;
 
     if (dest->length + fixed_size > dest->capacity) return -1;
     nbytes = fixed_size;
@@ -227,16 +227,52 @@ ssize_t ss_ring_buffer_write_fixed(ss_ring_buffer_t *dest, const void *src, size
     memcpy(dest->buffer + offset, src, nbytes);
 
 _l_end:
-    return (ssize_t)fixed_size;
+    return (ss_ssize_t)fixed_size;
 }
 
-size_t ss_ring_buffer_free_size(ss_ring_buffer_t *buffer)
+ss_size_t ss_ring_buffer_free_size(ss_ring_buffer_t *buffer)
 {
     return buffer->capacity - buffer->length;
 }
 
-size_t ss_ring_buffer_reset(ss_ring_buffer_t *buffer)
+ss_size_t ss_ring_buffer_reset(ss_ring_buffer_t *buffer)
 {
     buffer->offset = 0;
     buffer->length = 0;
+}
+
+
+ss_io_err_t ss_recv_via_buffer(void *dest, int fd, ss_ring_buffer_t *buffer, ss_size_t offset, ss_size_t size)
+{
+    ss_size_t expected_buffer_size;
+    if (offset + size > buffer->capacity)
+        return SS_IO_EOVERFLOW;
+    expected_buffer_size = offset + size;
+    if (buffer->length < expected_buffer_size &&
+        ss_ring_buffer_recv(fd, buffer, expected_buffer_size - buffer->length) <= 0)
+        return SS_IO_EAGAIN;
+    if (dest && (ss_size_t)ss_ring_buffer_steal(dest, buffer, offset, size) != size)
+        return SS_IO_ERROR;
+    return SS_IO_OK;
+}
+
+ss_io_err_t ss_recv_via_buffer_auto_inc(void *dest, int fd, ss_ring_buffer_t *buffer, ss_size_t *offset, ss_size_t size)
+{
+    ss_io_err_t rc;
+    if ((rc = ss_recv_via_buffer(dest, fd, buffer, *offset, size)) != SS_IO_OK) {
+        return rc;
+    }
+    *offset += size;
+    return SS_IO_OK;
+}
+
+ss_io_err_t ss_send_via_buffer(ss_ring_buffer_t *buffer, void *src, ss_size_t size)
+{
+    if (buffer->capacity < size) {
+        return SS_IO_EAGAIN;
+    }
+    if (ss_ring_buffer_write_fixed(buffer, src, size) != size) {
+        return SS_IO_ERROR;
+    }
+    return SS_IO_OK;
 }

@@ -2,9 +2,8 @@
 #define _SS_SERVICE_SS_DNS_H_
 
 #include "common/ss_time.h"
-#include "util/ss_io_helper.h"
+#include "common/ss_io_error.h"
 #include "util/ss_strmap_def.h"
-#include "util/ss_ring_buffer.h"
 #include "network/ss_inet.h"
 
 #define SS_DOMAIN_NAME_MAX_LENGTH 254
