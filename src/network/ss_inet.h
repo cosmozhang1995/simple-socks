@@ -5,6 +5,9 @@
 
 #include "common/ss_types.h"
 
+#define SS_IPV4_ADDR_SIZE  4
+#define SS_IPV6_ADDR_SIZE 16
+
 union ss_addr_u {
     sa_family_t          domain;
     struct sockaddr_in   ipv4;

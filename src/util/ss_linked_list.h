@@ -1,6 +1,8 @@
 #ifndef SOCKS5_LINKED_LIST_H
 #define SOCKS5_LINKED_LIST_H
 
+#include "common/ss_types.h"
+
 typedef struct linked_node_s {
     void *data;
     struct linked_node_s *prev;
@@ -29,5 +31,6 @@ ss_linked_node_t *ss_linked_list_insert_node(ss_linked_node_t *before, ss_linked
 ss_linked_node_t *ss_linked_list_pop_node_front(ss_linked_list_t *list);
 void ss_linked_list_remove(ss_linked_node_t *node);
 void ss_linked_list_detach(ss_linked_node_t *node);
+ss_size_t ss_linked_list_length(ss_linked_list_t *list);
 
 #endif

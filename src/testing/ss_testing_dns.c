@@ -28,7 +28,7 @@ void ss_testing_command_dns_initialize(ss_testing_server_wrapper_t *server)
 {
     ss_testing_command_dns_context_t *ctx;
     ctx = malloc(sizeof(ss_testing_command_dns_context_t));
-    ctx->service = ss_dns_service_start(ss_make_ipv4_addr("192.168.3.1", 53));
+    ctx->service = ss_dns_service_start(ss_make_ipv4_addr("30.30.30.30", 53));
     server->context[SS_TESTING_CMDID_DNS] = ctx;
 }
 

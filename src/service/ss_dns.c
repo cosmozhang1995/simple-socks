@@ -67,15 +67,25 @@ typedef ss_linked_list_t ss_dns_record_list_t;
 
 typedef struct ss_dns_record_s ss_dns_record_t;
 
+#define SS_DNS_HEADER_SIZE 12
+
 typedef struct ss_dns_header_s ss_dns_header_t;
 
+typedef struct ss_dns_rr_s ss_dns_rr_t;
+
+#define SS_DNS_RR_META_SIZE 10
+
+typedef struct ss_dns_rr_meta_s ss_dns_rr_meta_t;
+
+typedef union ss_dns_rdata_u ss_dns_rdata_t;
+
 struct ss_dns_header_s {
-    ss_uint16_t   tid;
-    ss_uint16_t   flags;
-    ss_uint16_t   nqueries;
-    ss_uint16_t   nanswers;
-    ss_uint16_t   nauthorities;
-    ss_uint16_t   nadditionals;
+    ss_uint16_t           tid;
+    ss_uint16_t           flags;
+    ss_uint16_t           nqueries;
+    ss_uint16_t           nanswers;
+    ss_uint16_t           nauthorities;
+    ss_uint16_t           nadditionals;
 };
 
 struct ss_dns_entry_s {
@@ -83,9 +93,28 @@ struct ss_dns_entry_s {
     ss_dns_record_list_t  list;
 };
 
+union ss_dns_rdata_u {
+    ss_addr_t            addr;
+    char                 cname[SS_DNML + 2];
+};
+
+struct ss_dns_rr_meta_s {
+    ss_uint16_t  type;
+    ss_uint16_t  class;
+    ss_int32_t   ttl;
+    ss_uint16_t  rdlength;
+};
+
+struct ss_dns_rr_s {
+    char                 name[SS_DNML + 2];
+    ss_dns_rr_meta_t     meta;
+    ss_dns_rdata_t       rdata;
+};
+
 struct ss_dns_record_s {
-    ss_addr_t      addr;
-    time_t         expire;
+    ss_dns_rdata_t        data;
+    ss_uint16_t           type;
+    time_t                expire;
 };
 
 static ss_bool_t next_tid(ss_dns_service_wrapper_t *service, ss_uint16_t *tid);
@@ -210,6 +239,8 @@ void ss_dns_service_stop_inner(ss_dns_service_wrapper_t *service)
     ss_dns_service_disconnect(service);
 }
 
+#define SS_DNS_QUESTION_TAIL_SIZE 4
+
 typedef struct ss_dns_question_tail_s ss_dns_question_tail_t;
 
 struct ss_dns_question_tail_s {
@@ -255,11 +286,11 @@ ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const 
     ss_dns_entry_t             *entry;
     ss_uint16_t                 tid;
     ss_uint8_t                  data[
-                                    sizeof(ss_dns_header_t)
+                                    SS_DNS_HEADER_SIZE
                                     + SS_DNML + 2
-                                    + sizeof(ss_dns_question_tail_t)
+                                    + SS_DNS_QUESTION_TAIL_SIZE
                                     + SS_DNML + 2
-                                    + sizeof(ss_dns_question_tail_t)];
+                                    + SS_DNS_QUESTION_TAIL_SIZE];
     ss_dns_header_t            *header;
     ss_dns_question_tail_t     *ques_a_tail;
     ss_dns_question_tail_t     *ques_aaaa_tail;
@@ -285,15 +316,15 @@ ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const 
     }
     reqlen = 0;
     header = (ss_dns_header_t *)data;
-    reqlen += sizeof(ss_dns_header_t);
+    reqlen += SS_DNS_HEADER_SIZE;
     ques_a_dn = (void *)(data + reqlen);
     reqlen += dnlen + 2;
     ques_a_tail = (ss_dns_question_tail_t *)(data + reqlen);
-    reqlen += sizeof(ss_dns_question_tail_t);
+    reqlen += SS_DNS_QUESTION_TAIL_SIZE;
     // ques_aaaa_dn = (void *)(data + reqlen);
     // reqlen += dnlen + 2;
     // ques_aaaa_tail = (ss_dns_question_tail_t *)(data + reqlen);
-    // reqlen += sizeof(ss_dns_question_tail_t);
+    // reqlen += SS_DNS_QUESTION_TAIL_SIZE;
     // initialize header data
     if (!next_tid(service, &tid)) {
         return SS_IO_EAGAIN;
@@ -349,7 +380,11 @@ ss_bool_t ss_dns_get_inner(ss_dns_service_wrapper_t *service, const char *dn, ss
             continue;
         }
         ss_linked_list_append_node(&entry->list, node);
-        *addr = record->addr;
+        if (record->type == SS_TYPE_CNAME) {
+            return ss_dns_get_inner(service, record->data.cname, addr);
+        } else {
+            *addr = record->data.addr;
+        }
         return SS_TRUE;
     }
     return SS_FALSE;
@@ -424,7 +459,33 @@ ss_dns_entry_t *ss_dns_entry(ss_dns_service_wrapper_t *service, const char *dn)
     return entry;
 }
 
-static void ss_dns_update(ss_dns_service_wrapper_t *service, const char *dn, ss_addr_t addr, ss_int32_t ttl)
+static ss_bool_t ss_dns_record_compare(ss_dns_record_t *r1, ss_dns_record_t *r2)
+{
+    if (r1->type != r2->type) return SS_FALSE;
+    switch (r1->type) {
+        case SS_TYPE_A:
+        case SS_TYPE_AAAA:
+            return ss_addr_equal(r1->data.addr, r2->data.addr);
+        case SS_TYPE_CNAME:
+            return strcmp(r1->data.cname, r2->data.cname) == 0;
+    }
+    return SS_TRUE;
+}
+
+static ss_bool_t ss_dns_record_compare_rr(ss_dns_record_t *r, ss_dns_rr_t *rr)
+{
+    if (r->type != rr->meta.type) return SS_FALSE;
+    switch (r->type) {
+        case SS_TYPE_A:
+        case SS_TYPE_AAAA:
+            return ss_addr_equal(r->data.addr, rr->rdata.addr);
+        case SS_TYPE_CNAME:
+            return strcmp(r->data.cname, rr->rdata.cname) == 0;
+    }
+    return SS_TRUE;
+}
+
+static void ss_dns_update(ss_dns_service_wrapper_t *service, ss_dns_rr_t *rr)
 {
     ss_dns_entry_t        *entry;
     ss_dns_record_list_t  *list;
@@ -434,7 +495,7 @@ static void ss_dns_update(ss_dns_service_wrapper_t *service, const char *dn, ss_
 
     time(&now);
     not_found = SS_TRUE;
-    entry = ss_dns_entry(service, dn);
+    entry = ss_dns_entry(service, rr->name);
     list = &entry->list;
     ss_linked_node_t *node, *next;
     for (
@@ -444,9 +505,9 @@ static void ss_dns_update(ss_dns_service_wrapper_t *service, const char *dn, ss_
     ) {
         next = node->next;
         temp = (ss_dns_record_t *)node->data;
-        if (not_found && ss_addr_equal(temp->addr, addr)) {
+        if (not_found && ss_dns_record_compare_rr(temp, rr)) {
             not_found = SS_FALSE;
-            temp->expire = now + ttl;
+            temp->expire = now + rr->meta.ttl;
         } else if (temp->expire < now) {
             ss_dns_record_release(temp);
             ss_linked_list_remove(node);
@@ -454,13 +515,20 @@ static void ss_dns_update(ss_dns_service_wrapper_t *service, const char *dn, ss_
     }
     if (not_found) {
         record = ss_dns_record_create();
-        record->expire = now + ttl;
-        record->addr = addr;
+        record->expire = now + rr->meta.ttl;
+        record->type = rr->meta.type;
+        switch (rr->meta.type) {
+            case SS_TYPE_A:
+            case SS_TYPE_AAAA:
+                record->data.addr = rr->rdata.addr;
+                break;
+            case SS_TYPE_CNAME:
+                strcpy(record->data.cname, rr->rdata.cname);
+                break;
+        }
         ss_linked_list_prepend(list, record);
     }
 }
-
-typedef struct ss_dns_rr_s ss_dns_rr_t;
 
 static const ss_uint16_t SS_DNS_FLAG_EMPTY       = 0x0000;
 static const ss_uint16_t SS_DNS_FLAG_QR          = 0x8000; // QR query (0) | response (1)
@@ -513,7 +581,7 @@ static void ss_dns_recv_handler(ss_connection_t *connection)
         if (rc < 0) service->dead = SS_FALSE;
         return;
     }
-    if (!ss_packet_buffer_read_front(&header, &service->recv_buffer, &offset, sizeof(ss_dns_header_t))) {
+    if (!ss_packet_buffer_read_front(&header, &service->recv_buffer, &offset, SS_DNS_HEADER_SIZE)) {
         rc = SS_IO_ERROR;
         goto _l_error;
     }
@@ -543,18 +611,13 @@ _l_error:
     return;
 }
 
-static ss_io_err_t read_domain_name_from_data(ss_dns_service_wrapper_t *service, size_t offset, char *domain)
-{
-}
-
-static ss_io_err_t read_domain_name(ss_dns_service_wrapper_t *service, size_t *offset, char *domain)
+static ss_io_err_t read_domain_name_with_total_length(ss_dns_service_wrapper_t *service, size_t *offset, char *domain, ss_uint16_t *total_length)
 {
     ss_uint8_t   label_length;
-    ss_uint16_t  total_length;
     ss_io_err_t  rc;
+    ss_size_t    pointer_offset;
 
     rc = SS_IO_OK;
-    total_length = 0;
     while (SS_TRUE) {
         if (!ss_packet_buffer_read_front(&label_length, &service->recv_buffer, offset, sizeof(label_length))) {
             rc = SS_IO_ERROR;
@@ -565,34 +628,48 @@ static ss_io_err_t read_domain_name(ss_dns_service_wrapper_t *service, size_t *o
             goto _l_end;
         }
         if (label_length & 0xC0) {
-            printf("ERROR: response query need compression\n");
-            rc = SS_IO_ERROR;
-            goto _l_end;
+            goto _l_compressed;
         }
-        if (total_length + (ss_uint16_t)label_length > SS_DNML) {
+        if (*total_length + (ss_uint16_t)label_length > SS_DNML) {
             printf("ERROR: domain name exceeds length restriction\n");
             rc = SS_IO_ERROR;
             goto _l_end;
         }
         if (!ss_packet_buffer_read_front(
-                (void *)(domain ? domain + total_length : SS_NULL),
+                (void *)(domain ? domain + *total_length : SS_NULL),
                 &service->recv_buffer, offset, (size_t)label_length)
         ) {
             rc = SS_IO_ERROR;
             goto _l_end;
         }
-        total_length += (ss_uint16_t)label_length;
-        if (domain) domain[total_length++] = '.';
+        *total_length += (ss_uint16_t)label_length;
+        if (domain) domain[(*total_length)++] = '.';
     }
+_l_compressed:
+    pointer_offset = ((ss_size_t)(label_length & 0x3F)) << 8;
+    if (!ss_packet_buffer_read_front(&label_length, &service->recv_buffer, offset, sizeof(label_length))) {
+        rc = SS_IO_ERROR;
+        goto _l_end;
+    }
+    pointer_offset |= label_length;
+    rc = read_domain_name_with_total_length(service, &pointer_offset, domain, total_length);
+    return rc;
 _l_end:
     if (domain) {
-        if (total_length != 0) {
-            domain[total_length - 1] = '\0';
+        if (*total_length != 0) {
+            domain[*total_length - 1] = '\0';
         } else {
             domain[0] = '\0';
         }
     }
     return rc;
+}
+
+static ss_io_err_t read_domain_name(ss_dns_service_wrapper_t *service, size_t *offset, char *domain)
+{
+    ss_uint16_t total_length;
+    total_length = 0;
+    return read_domain_name_with_total_length(service, offset, domain, &total_length);
 }
 
 static ss_io_err_t read_query(ss_dns_service_wrapper_t *service, size_t *offset)
@@ -631,29 +708,8 @@ const char *translate_rr_class(ss_uint16_t cls)
     return "<unknown>";
 }
 
-typedef struct ss_dns_rr_meta_s ss_dns_rr_meta_t;
-
-struct ss_dns_rr_meta_s {
-    ss_uint16_t  type;
-    ss_uint16_t  class;
-    ss_int32_t   ttl;
-    ss_uint16_t  rdlength;
-};
-
 static void ss_dns_rr_meta_hton(ss_dns_rr_meta_t *meta);
 static void ss_dns_rr_meta_ntoh(ss_dns_rr_meta_t *meta);
-
-typedef union ss_dns_rdata_u ss_dns_rdata_t;
-
-union ss_dns_rdata_u {
-    ss_addr_t addr;
-};
-
-struct ss_dns_rr_s {
-    char                 name[SS_DNML + 2];
-    ss_dns_rr_meta_t     meta;
-    ss_dns_rdata_t       rdata;
-};
 
 static void ss_dns_rdata_initialize(ss_dns_rdata_t *rdata)
 {
@@ -677,6 +733,7 @@ static void ss_dns_rr_uninitialize(ss_dns_rr_t *rr)
 
 static ss_io_err_t read_rdata_a(ss_dns_service_wrapper_t *service, size_t *offset, ss_dns_rr_t *rr);
 static ss_io_err_t read_rdata_aaaa(ss_dns_service_wrapper_t *service, size_t *offset, ss_dns_rr_t *rr);
+static ss_io_err_t read_rdata_cname(ss_dns_service_wrapper_t *service, size_t *offset, ss_dns_rr_t *rr);
 static ss_io_err_t read_rdata_any(ss_dns_service_wrapper_t *service, size_t *offset, ss_dns_rr_t *rr);
 
 static ss_io_err_t read_rr(ss_dns_service_wrapper_t *service, size_t *offset, ss_dns_rr_t *rr)
@@ -687,12 +744,13 @@ static ss_io_err_t read_rr(ss_dns_service_wrapper_t *service, size_t *offset, ss
         return rc;
     }
     // receive meta
-    if (!ss_packet_buffer_read_front(&rr->meta, &service->recv_buffer, offset, sizeof(rr->meta))) {
+    if (!ss_packet_buffer_read_front(&rr->meta, &service->recv_buffer, offset, SS_DNS_RR_META_SIZE)) {
         return SS_IO_ERROR;
     }
     ss_dns_rr_meta_ntoh(&rr->meta);
     if (rr->meta.class != SS_CLASS_IN) {
-        printf("ERROR: Unsupported RR class %s\n", translate_rr_class(rr->meta.class));
+        printf("ERROR: Unsupported RR class %s (%d)\n", translate_rr_class(rr->meta.class), (ss_int32_t)rr->meta.class);
+        rc = SS_IO_ERROR;
     }
     // receive RDATA
     switch (rr->meta.type) {
@@ -701,6 +759,9 @@ static ss_io_err_t read_rr(ss_dns_service_wrapper_t *service, size_t *offset, ss
         break;
     case SS_TYPE_AAAA:
         rc = read_rdata_aaaa(service, offset, rr);
+        break;
+    case SS_TYPE_CNAME:
+        rc = read_rdata_cname(service, offset, rr);
         break;
     default:
         rc = read_rdata_any(service, offset, rr);
@@ -711,16 +772,17 @@ static ss_io_err_t read_rr(ss_dns_service_wrapper_t *service, size_t *offset, ss
 
 static ss_io_err_t read_rdata_a(ss_dns_service_wrapper_t *service, size_t *offset, ss_dns_rr_t *rr)
 {
-    ss_addr_t             addr;
-    ss_io_err_t           rc;
+    ss_addr_t              addr;
     ss_dns_record_t       *entry;
     ss_dns_record_list_t  *entry_list;
-    time_t                now;
 
-    if (rr->meta.rdlength != sizeof(addr.ipv4.sin_addr))
+    if (rr->meta.rdlength != SS_IPV4_ADDR_SIZE) {
+        printf("RDATA for A record expect size %lu, but got %lu\n", SS_IPV4_ADDR_SIZE, (ss_size_t)rr->meta.rdlength);
         return SS_IO_ERROR;
-    if (ss_packet_buffer_read_front(&addr.ipv4.sin_addr, &service->recv_buffer, offset, sizeof(addr.ipv4.sin_addr)))
-        return rc;
+    }
+    if (!ss_packet_buffer_read_front(&addr.ipv4.sin_addr, &service->recv_buffer, offset, SS_IPV4_ADDR_SIZE)) {
+        return SS_IO_ERROR;
+    }
     addr.ipv4.sin_family = AF_INET;
     addr.ipv4.sin_port = 0;
     rr->rdata.addr = addr;
@@ -729,19 +791,35 @@ static ss_io_err_t read_rdata_a(ss_dns_service_wrapper_t *service, size_t *offse
 
 static ss_io_err_t read_rdata_aaaa(ss_dns_service_wrapper_t *service, size_t *offset, ss_dns_rr_t *rr)
 {
-    ss_addr_t             addr;
-    ss_io_err_t           rc;
+    ss_addr_t              addr;
     ss_dns_record_t       *entry;
     ss_dns_record_list_t  *entry_list;
-    time_t                now;
 
-    if (rr->meta.rdlength != sizeof(addr.ipv6.sin6_addr))
+    if (rr->meta.rdlength != SS_IPV6_ADDR_SIZE) {
+        printf("RDATA for AAAA record expect size %lu, but got %lu\n", SS_IPV6_ADDR_SIZE, (ss_size_t)rr->meta.rdlength);
         return SS_IO_ERROR;
-    if (ss_packet_buffer_read_front(&addr.ipv6.sin6_addr, &service->recv_buffer, offset, sizeof(addr.ipv6.sin6_addr)))
-        return rc;
+    }
+    if (!ss_packet_buffer_read_front(&addr.ipv6.sin6_addr, &service->recv_buffer, offset, SS_IPV6_ADDR_SIZE)) {
+        return SS_IO_ERROR;
+    }
     addr.ipv6.sin6_family = AF_INET6;
     addr.ipv6.sin6_port = 0;
     rr->rdata.addr = addr;
+    return SS_IO_OK;
+}
+
+static ss_io_err_t read_rdata_cname(ss_dns_service_wrapper_t *service, size_t *offset, ss_dns_rr_t *rr)
+{
+    ss_io_err_t            rc;
+    ss_dns_record_t       *entry;
+    ss_dns_record_list_t  *entry_list;
+    ss_size_t              init_offset;
+
+    init_offset = *offset;
+    if ((rc = read_domain_name(service, offset, rr->rdata.cname)) != SS_IO_OK)
+        return rc;
+    if (*offset - init_offset != rr->meta.rdlength)
+        return SS_IO_ERROR;
     return SS_IO_OK;
 }
 
@@ -761,12 +839,9 @@ static ss_io_err_t read_answer(ss_dns_service_wrapper_t *service, size_t *offset
     switch (rr.meta.type) {
     case SS_TYPE_A:
     case SS_TYPE_AAAA:
-        if (rr.meta.class != SS_CLASS_IN) {
-            rc = SS_IO_ERROR;
-            break;
-        }
+    case SS_TYPE_CNAME:
         if (rr.meta.ttl > 0) {
-            ss_dns_update(service, rr.name, rr.rdata.addr, rr.meta.ttl);
+            ss_dns_update(service, &rr);
         }
         break;
     default:

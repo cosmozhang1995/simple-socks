@@ -69,7 +69,7 @@ ss_linked_node_t *ss_linked_list_prepend(ss_linked_list_t *list, void *data)
 {
     ss_linked_node_t *node;
     node = linked_node_create(data);
-    linked_node_insert_before(node, list->head);
+    linked_node_insert_before(node, list->head->next);
     return node;
 }
 
@@ -119,6 +119,21 @@ void ss_linked_list_remove(ss_linked_node_t *node)
 void ss_linked_list_detach(ss_linked_node_t *node)
 {
     linkde_node_detach(node);
+}
+
+ss_size_t ss_linked_list_length(ss_linked_list_t *list)
+{
+    ss_linked_node_t *node;
+    ss_size_t         length;
+
+    length = 0;
+    for (
+        node = list->head->next;
+        node != SS_NULL && node != list->tail;
+        node = node->next
+    )
+        length++;
+    return length;
 }
 
 
