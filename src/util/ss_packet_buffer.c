@@ -95,56 +95,30 @@ ss_io_err_t ss_packet_buffer_send_front(int fd, ss_packet_buffer_t *buffer)
 
 ss_bool_t ss_packet_buffer_pop_front(ss_packet_buffer_t *buffer, ss_packet_t *packet)
 {
-    // void                      *dataptr;
-    // ss_packet_block_t  *block;
-    // ssize_t                    rc;
-
-    // if (buffer->packet_count == 0)
-    //     return SS_FALSE;
-    // block = get_block(buffer, 0);
-    // dataptr = get_block_data(block);
-    // if (packet) {
-    //     packet->dataptr = dataptr;
-    //     packet->size = block->size;
-    // }
-    // block->size = 0;
-    // buffer->packet_offset = (buffer->packet_offset + 1) % buffer->max_packets;
-    // buffer->packet_count--;
-    // return SS_TRUE;
-
     ss_packet_block_t         *block;
     void                      *dataptr;
 
+    if (buffer->packet_count == 0)
+        return SS_FALSE;
     block = get_block(buffer, 0);
     dataptr = get_block_data(block);
     if (packet) {
         packet->dataptr = dataptr;
         packet->size = block->size;
     }
+    buffer->packet_offset = (buffer->packet_offset + 1) % buffer->max_packets;
+    buffer->packet_count--;
+    return SS_TRUE;
 }
 
 ss_bool_t ss_packet_buffer_push_back(ss_packet_buffer_t *buffer, ss_packet_block_t packet)
 {
-    // void                      *dataptr;
-    // ss_packet_block_t  *block;
-
-    // if (size > buffer->packet_size)
-    //     return SS_FALSE;
-    // if (size == 0)
-    //     return SS_FALSE;
-    // if (buffer->packet_count + 1 >= buffer->max_packets)
-    //     return SS_FALSE;
-    // block = get_block(buffer, buffer->packet_count);
-    // dataptr = get_block_data(block);
-    // memcpy(dataptr, data, size);
-    // block->size = size;
-    // buffer->packet_count++;
-    // return SS_IO_OK;
-
     ss_packet_block_t  *block;
+
     block = get_block(buffer, buffer->packet_count);
     memcpy(block, &packet, sizeof(ss_packet_block_t));
     buffer->packet_count++;
+    return SS_TRUE;
 }
 
 ss_bool_t ss_packet_buffer_read_front(void *dest, ss_packet_buffer_t *buffer, ss_size_t *offset_ptr, ss_size_t size)
