@@ -6,7 +6,7 @@ import re
 from template import Template
 
 class CModule:
-    def __init__(self, module_path):
+    def __init__(self, module_path, module_names=[]):
         self.module_path = sys.argv[1]
 
         self.header_file = module_path + '.h'
@@ -36,6 +36,8 @@ class CModule:
         self.header_file_content = None
         self.source_file_content = None
 
+        self.module_names = module_names
+
     def generate_folder(self):
         file_dir = os.path.dirname(self.module_path)
         if not os.path.isdir(file_dir):
@@ -44,13 +46,15 @@ class CModule:
     def compile_header(self):
         if self.header_file_content is None:
             self.header_file_content = Template('module.h').render(
-                module_def = self.module_def
+                module_def = self.module_def,
+                module_names = self.module_names
             )
     
     def compile_source(self):
         if self.source_file_content is None:
             self.source_file_content = Template('module.c').render(
-                header_file_path = self.module_rel_path + '.h'
+                header_file_path = self.module_rel_path + '.h',
+                module_names = self.module_names
             )
 
     def generate_header(self):
@@ -73,7 +77,9 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         print("""Usage: {sys.argv[0]} <module_path>""")
         exit(1)
-    m = CModule(sys.argv[1])
+    module_path = sys.argv[1]
+    module_names = [module_path.split('/')[-1]]
+    m = CModule(module_path, module_names)
     m.compile_header()
     m.compile_source()
     m.generate_header()
