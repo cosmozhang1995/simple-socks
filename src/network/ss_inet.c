@@ -122,14 +122,14 @@ int ss_addr_stringify_ipv4_port(char *dest, ss_addr_t addr)
 int ss_addr_stringify_ipv6_address(char *dest, ss_addr_t addr)
 {
     return sprintf(dest, "%x:%x:%x:%x:%x:%x:%x:%x",
-        ((ss_uint16_t *)&addr.ipv6.sin6_addr)[0],
-        ((ss_uint16_t *)&addr.ipv6.sin6_addr)[1],
-        ((ss_uint16_t *)&addr.ipv6.sin6_addr)[2],
-        ((ss_uint16_t *)&addr.ipv6.sin6_addr)[3],
-        ((ss_uint16_t *)&addr.ipv6.sin6_addr)[4],
-        ((ss_uint16_t *)&addr.ipv6.sin6_addr)[5],
-        ((ss_uint16_t *)&addr.ipv6.sin6_addr)[6],
-        ((ss_uint16_t *)&addr.ipv6.sin6_addr)[7]
+        ntohs(((ss_uint16_t *)&addr.ipv6.sin6_addr)[0]),
+        ntohs(((ss_uint16_t *)&addr.ipv6.sin6_addr)[1]),
+        ntohs(((ss_uint16_t *)&addr.ipv6.sin6_addr)[2]),
+        ntohs(((ss_uint16_t *)&addr.ipv6.sin6_addr)[3]),
+        ntohs(((ss_uint16_t *)&addr.ipv6.sin6_addr)[4]),
+        ntohs(((ss_uint16_t *)&addr.ipv6.sin6_addr)[5]),
+        ntohs(((ss_uint16_t *)&addr.ipv6.sin6_addr)[6]),
+        ntohs(((ss_uint16_t *)&addr.ipv6.sin6_addr)[7])
     );
 }
 

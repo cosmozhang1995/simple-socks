@@ -321,10 +321,10 @@ ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const 
     reqlen += dnlen + 2;
     ques_a_tail = (ss_dns_question_tail_t *)(data + reqlen);
     reqlen += SS_DNS_QUESTION_TAIL_SIZE;
-    // ques_aaaa_dn = (void *)(data + reqlen);
-    // reqlen += dnlen + 2;
-    // ques_aaaa_tail = (ss_dns_question_tail_t *)(data + reqlen);
-    // reqlen += SS_DNS_QUESTION_TAIL_SIZE;
+    ques_aaaa_dn = (void *)(data + reqlen);
+    reqlen += dnlen + 2;
+    ques_aaaa_tail = (ss_dns_question_tail_t *)(data + reqlen);
+    reqlen += SS_DNS_QUESTION_TAIL_SIZE;
     // initialize header data
     if (!next_tid(service, &tid)) {
         return SS_IO_EAGAIN;
@@ -334,7 +334,7 @@ ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const 
     // initialize A question QNAME
     encode_domain_name(ques_a_dn, dn, dnlen);
     // initialize A question tail
-    ques_a_tail->qtype = SS_TYPE_A;
+    ques_a_tail->qtype = SS_TYPE_AAAA;
     ques_a_tail->qclass = SS_CLASS_IN;
     ss_dns_question_tail_hton(ques_a_tail);
     // // initialize AAAA question QNAME, which is same to A question QNAME
