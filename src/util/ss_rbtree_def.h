@@ -28,7 +28,6 @@ typedef struct ss_rbtree_s  ss_rbtree_t;
 struct ss_rbtree_s {
     ss_rbtree_node_t           *root;
     ss_rbtree_node_t           *sentinel;
-    // ss_rbtree_insert_pt         insert;
     ss_rbtree_node_comparator_t comparator;
 };
 

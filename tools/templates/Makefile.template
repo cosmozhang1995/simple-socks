@@ -39,3 +39,9 @@ UT_SOURCES = $(SOURCES) $(CURDIR)/test/*.c
 UT_HEADERS = $(HEADERS) $(CURDIR)/test/*.h
 UT_CFLAGS = -I$(CURDIR)/test $(CFLAGS)
 
+## for target in testing_targets
+
+$(CURDIR)/{target} : $(CURDIR)/{target}.h $(CURDIR)/{target}.c $(UT_SOURCES) $(UT_HEADERS)
+	$(CC) $(UT_CFLAGS) -o $(CURDIR)/{target} $(MAIN) $(UT_SOURCES)
+
+## endfor
