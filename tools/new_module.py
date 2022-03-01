@@ -7,7 +7,7 @@ from template import Template
 
 class CModule:
     def __init__(self, module_path, module_names=[]):
-        self.module_path = sys.argv[1]
+        self.module_path = module_path
 
         self.header_file = module_path + '.h'
         self.source_file = module_path + '.c'

@@ -777,7 +777,7 @@ static ss_io_err_t read_rdata_a(ss_dns_service_wrapper_t *service, size_t *offse
     ss_dns_record_list_t  *entry_list;
 
     if (rr->meta.rdlength != SS_IPV4_ADDR_SIZE) {
-        printf("RDATA for A record expect size %lu, but got %lu\n", SS_IPV4_ADDR_SIZE, (ss_size_t)rr->meta.rdlength);
+        printf("RDATA for A record expect size %lu, but got %lu\n", (ss_size_t)SS_IPV4_ADDR_SIZE, (ss_size_t)rr->meta.rdlength);
         return SS_IO_ERROR;
     }
     if (!ss_packet_buffer_read_front(&addr.ipv4.sin_addr, &service->recv_buffer, offset, SS_IPV4_ADDR_SIZE)) {
@@ -796,7 +796,7 @@ static ss_io_err_t read_rdata_aaaa(ss_dns_service_wrapper_t *service, size_t *of
     ss_dns_record_list_t  *entry_list;
 
     if (rr->meta.rdlength != SS_IPV6_ADDR_SIZE) {
-        printf("RDATA for AAAA record expect size %lu, but got %lu\n", SS_IPV6_ADDR_SIZE, (ss_size_t)rr->meta.rdlength);
+        printf("RDATA for AAAA record expect size %lu, but got %lu\n", (ss_size_t)SS_IPV6_ADDR_SIZE, (ss_size_t)rr->meta.rdlength);
         return SS_IO_ERROR;
     }
     if (!ss_packet_buffer_read_front(&addr.ipv6.sin6_addr, &service->recv_buffer, offset, SS_IPV6_ADDR_SIZE)) {

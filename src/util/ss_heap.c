@@ -2,6 +2,7 @@
 
 #include <memory.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define DEFAULT_CAPACITY 4
 
@@ -55,6 +56,8 @@ ss_bool_t ss_heap_push(ss_heap_t *heap, ss_variable_t value)
     }
     for (i = heap->size - 1; i != 0;) {
         ip = ((i + 1) >> 1) - 1;
+        // printf("compare %d with %d result %d\n", heap->values[i].int32, heap->values[ip].int32,
+        //     heap->comparator(heap->values[i], heap->values[ip]));
         if (heap->comparator(heap->values[i], heap->values[ip]) <= 0) {
             break;
         }

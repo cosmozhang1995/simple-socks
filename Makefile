@@ -26,7 +26,7 @@ MAIN = $(CURDIR)/src/main.c
 BINARY = $(CURDIR)/build/socks
 
 clean:
-	rm build/socks
+	rm $(CURDIR)/build/*
 
 build: $(BINARY)
 
@@ -38,4 +38,8 @@ $(BINARY): $(MAIN) $(SOURCES) $(HEADERS)
 UT_SOURCES = $(SOURCES) $(CURDIR)/test/*.c
 UT_HEADERS = $(HEADERS) $(CURDIR)/test/*.h
 UT_CFLAGS = -I$(CURDIR)/test $(CFLAGS)
+
+util_ss_heap_test : $(CURDIR)/build/util_ss_heap_test
+$(CURDIR)/build/util_ss_heap_test : $(CURDIR)/test/util/ss_heap_test.c $(UT_SOURCES) $(UT_HEADERS)
+	$(CC) $(UT_CFLAGS) -o $(CURDIR)/build/util_ss_heap_test $(CURDIR)/test/util/ss_heap_test.c $(UT_SOURCES)
 

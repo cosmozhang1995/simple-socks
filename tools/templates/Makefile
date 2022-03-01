@@ -26,7 +26,7 @@ MAIN = $(CURDIR)/src/main.c
 BINARY = $(CURDIR)/build/socks
 
 clean:
-	rm build/socks
+	rm $(CURDIR)/build/*
 
 build: $(BINARY)
 
@@ -41,7 +41,8 @@ UT_CFLAGS = -I$(CURDIR)/test $(CFLAGS)
 
 ## for target in testing_targets
 
-$(CURDIR)/{target} : $(CURDIR)/{target}.h $(CURDIR)/{target}.c $(UT_SOURCES) $(UT_HEADERS)
-	$(CC) $(UT_CFLAGS) -o $(CURDIR)/{target} $(MAIN) $(UT_SOURCES)
+{{target.name}} : $(CURDIR)/build/{{target.bin_file}}
+$(CURDIR)/build/{{target.bin_file}} : $(CURDIR)/test/{{target.source_file}} $(UT_SOURCES) $(UT_HEADERS)
+	$(CC) $(UT_CFLAGS) -o $(CURDIR)/build/{{target.bin_file}} $(CURDIR)/test/{{target.source_file}} $(UT_SOURCES)
 
 ## endfor

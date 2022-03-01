@@ -72,7 +72,7 @@ void ss_testing_comamnd_dns_porcessor(ss_testing_session_t *session)
         ss_send_via_buffer(&session->response_buffer, msg, strlen(msg));
         session->finished = SS_TRUE;
     } else if (rc == SS_IO_EAGAIN) {
-        sprintf(msg, "Name: %s fetching...\n\r", dn, addrstr);
+        sprintf(msg, "Name: %s fetching...\n\r", dn);
         ss_send_via_buffer(&session->response_buffer, msg, strlen(msg));
         strcpy(ctx->current, dn);
         time(&now);
