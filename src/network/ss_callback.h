@@ -40,13 +40,15 @@ typedef ss_uint8_t ss_callback_status_t;
  */
 #define SS_CALLBACK_TIMEOUT       3
 
+typedef struct ss_callback_context_s ss_callback_context_t;
+
 struct ss_callback_context_s {
     ss_callback_handler_t    handler;
     ss_callback_status_t     status;
-    ss_time_t                expire;
+    ss_timestamp_t           expire;
     ss_variable_t            data;
 };
 
-void ss_callback_register();
+ss_callback_context_t *ss_callback_register(ss_callback_handler_t handler, ss_time_t timeout);
 
 #endif // _SS_NETWORK_SS_CALLBACK_H_

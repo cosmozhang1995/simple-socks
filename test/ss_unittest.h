@@ -3,24 +3,8 @@
 
 #include "common/ss_types.h"
 
-// typedef void (*ss_unittest_function_t)();
 
-// extern ss_unittest_function_t ss_unittest_function;
-
-
-// #define SS_UNITTEST(func_body)                                 \
-// void ss_unittest_function_impl() {                             \
-//     func_body;                                                 \
-// }                                                              \
-// ss_unittest_function_t ss_unittest_function =                  \
-//     ss_unittest_function_impl;
-
-
-// #define SS_UNITTEST_FUNCTION(func)                             \
-//     ss_unittest_function_t ss_unittest_function = func;        \
-
-
-#define SS_UNITTEST                                             \
+#define SS_UNITTEST(name)                                             \
 void ss_unittest_function()
 
 

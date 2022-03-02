@@ -19,10 +19,12 @@
 #include "network/ss_listening.h"
 #include "network/ss_connection_def.h"
 #include "network/ss_connection.h"
+#include "network/ss_callback_sys.h"
 #include "util/error_utils.h"
 #include "fcntl.h"
 
 #define EPOLL_SIZE 2048
+#define MAX_TIMEOUT 1000
 
 #define NIT_CONNECTION 1
 #define NIT_LISTENING  2
@@ -60,6 +62,7 @@ int ss_network_prepare()
 {
     if (epfd < 0) epfd = epoll_create(1024);
     if (epfd < 0) return -1;
+    ss_callback_prepare();
     ss_linked_list_initialize(&network_item_list);
     return 0;
 }
@@ -81,6 +84,7 @@ int ss_network_stop()
         node->data = SS_NULL;
     }
     ss_linked_list_uninitialize(&network_item_list, SS_NULL);
+    ss_callback_stop();
     return 0;
 }
 
