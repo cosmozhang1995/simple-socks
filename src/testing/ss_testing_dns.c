@@ -31,8 +31,11 @@ struct ss_testing_command_dns_context_s {
 void ss_testing_command_dns_initialize(ss_testing_server_wrapper_t *server)
 {
     ss_testing_command_dns_context_t *ctx;
+    const char                       *addr_str;
+
+    addr_str = getenv("DNS_RESOLVER");
     ctx = malloc(sizeof(ss_testing_command_dns_context_t));
-    ctx->service = ss_dns_service_start(ss_make_ipv4_addr(getenv("DNS_RESOLVER"), 53));
+    ctx->service = ss_dns_service_start(ss_make_ipv4_addr(addr_str, 53));
     server->context[SS_TESTING_CMDID_DNS] = ctx;
 }
 

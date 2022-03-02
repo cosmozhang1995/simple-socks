@@ -7,6 +7,7 @@
 #include "util/ss_heap.h"
 
 #define MAX_QUEUE_SIZE 0x4000
+#define RECONSTRUCT_LEVEL 2
 
 ss_callback_context_t *ss_callback_create(ss_callback_handler_t handler, ss_time_t timeout);
 void ss_callback_destroy(ss_callback_context_t *callback);
@@ -129,18 +130,29 @@ static void ss_callback_clean()
         var = callback_queue.values[i];
         cb = var.ptr;
         if (cb->status != SS_CALLBACK_INIT) {
-            ss_heap_pop(&callback_queue, SS_NULL);
-            ss_callback_destroy(cb);
+            cb->status = SS_CALLBACK_CLEANED;
+            j++;
         } else if (cb->expire <= now) {
-            ss_heap_pop(&callback_queue, SS_NULL);
             if (cb->handler) {
                 cb->handler(cb);
             }
+            cb->status = SS_CALLBACK_CLEANED;
+            j++;
+        }
+    }
+    if (j < (callback_queue.size >> RECONSTRUCT_LEVEL)) {
+        return;
+    }
+    for (i = 0, j = 0; i < callback_queue.size; i++) {
+        var = callback_queue.values[i];
+        cb = var.ptr;
+        if (cb->status == SS_CALLBACK_CLEANED) {
             ss_callback_destroy(cb);
         } else {
             callback_queue.values[j++] = var;
         }
     }
     callback_queue.size = j;
+    ss_heap_reconstruct(&callback_queue);
 }
 

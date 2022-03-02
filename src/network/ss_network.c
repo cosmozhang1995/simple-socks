@@ -94,12 +94,14 @@ void ss_network_main_loop()
     int                   nevents;
     struct epoll_event    epoll_events[EPOLL_SIZE];
     ss_network_item_t    *nitem;
+    int                   timeout;
 
+    timeout = MAX_TIMEOUT;
     while (1) {
         if (trigger_signal != 0) {
             break;
         }
-        nevents = epoll_wait(epfd, epoll_events, EPOLL_SIZE, 1000);
+        nevents = epoll_wait(epfd, epoll_events, EPOLL_SIZE, timeout);
         if (nevents < 0) {
             break;
         }
@@ -117,6 +119,9 @@ void ss_network_main_loop()
                 break;
             }
         }
+        timeout = ss_callback_poll();
+        if (timeout > MAX_TIMEOUT)
+            timeout = MAX_TIMEOUT;
     }
 }
 
