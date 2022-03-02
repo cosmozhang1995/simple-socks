@@ -151,10 +151,10 @@ void ss_dns_service_stop(ss_dns_service_t *service)
     ss_dns_service_stop_inner((ss_dns_service_wrapper_t *)service);
 }
 
-static ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *domain_name, ss_addr_t *addr);
-ss_io_err_t ss_dns_fetch(ss_dns_service_t *service, const char *domain_name, ss_addr_t *addr)
+static ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *domain_name, ss_callback_context_t *callback);
+ss_io_err_t ss_dns_fetch(ss_dns_service_t *service, const char *domain_name, ss_callback_context_t *callback)
 {
-    return ss_dns_fetch_inner((ss_dns_service_wrapper_t *)service, domain_name, addr);
+    return ss_dns_fetch_inner((ss_dns_service_wrapper_t *)service, domain_name, callback);
 }
 
 static ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const char *domain_name);
@@ -256,14 +256,15 @@ static void ss_dns_question_tail_ntoh(ss_dns_question_tail_t *tail);
  * 
  * @param service service instance
  * @param dn domain name
- * @param addr fetched address
+ * @param callback callback
  * @return ss_io_err_t OK for success. EAGIAN if requesting. Otherwise for failure.
  */
 static
-ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *dn, ss_addr_t *addr)
+ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *dn, ss_callback_context_t *callback)
 {
-    ss_io_err_t rc;
-    if (ss_dns_get_inner(service, dn, addr)) {
+    ss_io_err_t      rc;
+    ss_addr_t        addr;
+    if (ss_dns_get_inner(service, dn, &addr)) {
         return SS_IO_OK;
     }
     if ((rc = ss_dns_resolve_start_inner(service, dn)) != SS_IO_OK) {
@@ -280,7 +281,7 @@ ss_io_err_t ss_dns_fetch_inner(ss_dns_service_wrapper_t *service, const char *dn
  * @return ss_io_err_t 
  */
 static
-ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const char *dn)
+ss_io_err_t ss_dns_resolve_start_inner(ss_dns_service_wrapper_t *service, const char *dn, ss_callback_context_t *callback)
 {
     ss_variable_t               var;
     ss_dns_entry_t             *entry;
