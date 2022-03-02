@@ -4,7 +4,7 @@
 #include "common/ss_types.h"
 
 
-#define SS_UNITTEST(name)                                             \
+#define SS_UNITTEST                                             \
 void ss_unittest_function()
 
 

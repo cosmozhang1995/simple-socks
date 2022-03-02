@@ -120,10 +120,55 @@ ss_bool_t ss_heap_peak(ss_heap_t *heap, ss_variable_t *value)
 
 void ss_heap_foreach(ss_heap_t *heap, ss_heap_visitor_t visitor)
 {
-    for (size_t i = 0; i < heap->size; i++) {
+    size_t i;
+    for (i = 0; i < heap->size; i++) {
         if (!visitor(heap->values + i)) {
             break;
         }
     }
+}
+
+void ss_heap_reconstruct(ss_heap_t *heap)
+{
+    size_t           ii, i, il, ir, in;
+    ss_variable_t    tmp;
+    if (heap->size <= 1) {
+        return;
+    }
+    for (ii = heap->size >> 1; ii != 0; ii--) {
+        for (i = ii - 1; ; ) {
+            ir = (i + 1) << 1;
+            il = ir - 1;
+            if (ir < heap->size) {
+                in = heap->comparator(heap->values[il], heap->values[ir]) < 0 ? ir : il;
+            } else if (il < heap->size) {
+                in = il;
+            } else {
+                break;
+            }
+            if (heap->comparator(heap->values[i], heap->values[in]) >= 0) {
+                break;
+            }
+            tmp = heap->values[i];
+            heap->values[i] = heap->values[in];
+            heap->values[in] = tmp;
+            i = in;
+        }
+    }
+}
+
+void ss_heap_reserve(ss_heap_t *heap, ss_size_t capacity)
+{
+    size_t            real_cap;
+    ss_variable_t    *new_values;
+    ss_variable_t    *old_values;
+    for (real_cap = DEFAULT_CAPACITY; real_cap < capacity; real_cap = real_cap << 1);
+    if (real_cap <= heap->capacity) return;
+    new_values = malloc(real_cap * sizeof(ss_variable_t));
+    old_values = heap->values;
+    memcpy(new_values, heap->values, heap->size * sizeof(ss_variable_t));
+    heap->values = new_values;
+    heap->capacity = real_cap;
+    free(old_values);
 }
 

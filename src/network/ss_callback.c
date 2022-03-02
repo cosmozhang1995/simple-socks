@@ -16,7 +16,7 @@ void ss_callback_uninitialize(ss_callback_context_t *callback);
 static ss_heap_t callback_queue;
 
 static ss_int32_t ss_callback_queue_comparartor(ss_variable_t v1, ss_variable_t v2);
-static ss_bool_t ss_callback_queue_stop_handler(ss_variable_t v);
+static ss_bool_t ss_callback_queue_stop_handler(ss_variable_t *v);
 
 static void ss_callback_clean();
 
@@ -111,9 +111,9 @@ static ss_int32_t ss_callback_queue_comparartor(ss_variable_t v1, ss_variable_t 
     else return 0;
 }
 
-static ss_bool_t ss_callback_queue_stop_handler(ss_variable_t v)
+static ss_bool_t ss_callback_queue_stop_handler(ss_variable_t *v)
 {
-    ss_callback_destroy((ss_callback_context_t *)v.ptr);
+    ss_callback_destroy((ss_callback_context_t *)v->ptr);
 }
 
 static void ss_callback_clean()

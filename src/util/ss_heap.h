@@ -12,5 +12,7 @@ ss_bool_t ss_heap_push(ss_heap_t *heap, ss_variable_t value);
 ss_bool_t ss_heap_pop(ss_heap_t *heap, ss_variable_t *value);
 ss_bool_t ss_heap_peak(ss_heap_t *heap, ss_variable_t *value);
 void ss_heap_foreach(ss_heap_t *, ss_heap_visitor_t);
+void ss_heap_reconstruct(ss_heap_t *);
+void ss_heap_reserve(ss_heap_t *, ss_size_t);
 
 #endif // _SS_UTIL_SS_HEAP_H_
